@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Release Radar</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Release Radar</p>
+          <h1>Your weekly release pulse, built from the artists you actually save.</h1>
+          <p class="lede">
+            Connect Spotify, scan your liked songs, and generate a Friday radar that
+            pulls in fresh albums, singles, and featured appearances from the artists
+            you care about most.
+          </p>
+          <div class="hero-actions">
+            <button id="connect-button" class="button button-primary">Connect Spotify</button>
+            <button id="generate-button" class="button button-secondary">Build This Week's Radar</button>
+            <button id="prep-button" class="button button-secondary">Thursday Prep</button>
+          </div>
+          <p id="status" class="status">Not connected.</p>
+        </div>
+
+        <aside class="hero-panel">
+          <p class="eyebrow">This Week</p>
+          <div class="stat-grid">
+            <article class="stat-card">
+              <span class="stat-label">Window</span>
+              <strong id="stat-window" class="stat-value">Saturday to Friday</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">Qualified Artists</span>
+              <strong id="stat-qualified-artists" class="stat-value">0</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">Release Matches</span>
+              <strong id="stat-release-count" class="stat-value">0</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">Playlist Tracks</span>
+              <strong id="stat-track-count" class="stat-value">0</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">Last Run</span>
+              <strong id="stat-last-run" class="stat-value">Never</strong>
+            </article>
+            <article class="stat-card">
+              <span class="stat-label">Cache Footprint</span>
+              <strong id="stat-cache-size" class="stat-value">0 items</strong>
+            </article>
+          </div>
+        </aside>
+      </section>
+
+      <section class="layout-grid">
+        <section class="stack">
+          <section class="card">
+            <p class="eyebrow">Setup</p>
+            <h2>Spotify connection</h2>
+            <div class="field-grid">
+              <label class="field">
+                <span>Spotify Client ID</span>
+                <input id="client-id" type="text" placeholder="Paste your Spotify app client ID" />
+              </label>
+
+              <label class="field">
+                <span>Redirect URI</span>
+                <input id="redirect-uri" type="text" />
+              </label>
+            </div>
+
+            <div class="actions">
+              <button id="disconnect-button" class="button button-ghost">Disconnect</button>
+            </div>
+          </section>
+
+          <section id="profile-card" class="card hidden">
+            <p class="eyebrow">Connected Account</p>
+            <div class="profile-header">
+              <img id="profile-image" class="avatar hidden" alt="Spotify profile" />
+              <div>
+                <h2 id="display-name">Spotify User</h2>
+                <p id="email" class="muted"></p>
+                <p id="product" class="pill"></p>
+              </div>
+            </div>
+          </section>
+
+          <section id="next-step-card" class="card hidden">
+            <p class="eyebrow">Radar Rules</p>
+            <h2>What makes the cut</h2>
+            <div class="rule-list">
+              <article class="rule-card">
+                <strong>Library weighting</strong>
+                <p>Artists need at least two liked songs before they qualify for the weekly scan.</p>
+              </article>
+              <article class="rule-card">
+                <strong>Release window</strong>
+                <p>The radar looks at the current Saturday-to-Friday window, including featured appearances.</p>
+              </article>
+              <article class="rule-card">
+                <strong>Playlist sync</strong>
+                <p>Fresh tracks are ranked, deduplicated, and synced into one private Spotify playlist.</p>
+              </article>
+            </div>
+
+            <div class="config-grid">
+              <label class="field">
+                <span>Playlist name</span>
+                <input id="playlist-name" type="text" value="Release Radar" />
+              </label>
+            </div>
+          </section>
+
+          <section id="results-card" class="card hidden">
+            <div class="results-header">
+              <div>
+                <p class="eyebrow">Release Radar</p>
+                <h2 id="results-title">No playlist generated yet</h2>
+              </div>
+              <p id="results-summary" class="muted">
+                Connect Spotify and build your weekly radar to see the ranked releases here.
+              </p>
+            </div>
+            <ol id="results-list" class="results-list"></ol>
+          </section>
+        </section>
+
+        <aside class="stack">
+          <section class="card accent-card">
+            <p class="eyebrow">Flow</p>
+            <h2>How this radar works</h2>
+            <div class="timeline">
+              <div class="timeline-step">
+                <span class="timeline-index">01</span>
+                <p>Pull your liked songs and measure which artists you repeatedly save.</p>
+              </div>
+              <div class="timeline-step">
+                <span class="timeline-index">02</span>
+                <p>Check recent albums, singles, and appearances inside the weekly release window.</p>
+              </div>
+              <div class="timeline-step">
+                <span class="timeline-index">03</span>
+                <p>Rank the results by affinity and freshness, then publish the playlist back to Spotify.</p>
+              </div>
+            </div>
+          </section>
+
+          <section id="automation-card" class="card hidden">
+            <p class="eyebrow">Automation</p>
+            <h2>Friday runner credentials</h2>
+            <p class="muted">
+              Export the client and refresh token used by the unattended script in this workspace.
+            </p>
+            <div class="actions">
+              <button id="export-config-button" class="button button-secondary">Show Automation Config</button>
+            </div>
+            <pre id="config-output" class="config-output hidden"></pre>
+          </section>
+
+          <section class="card">
+            <p class="eyebrow">Controls</p>
+            <h2>Run management</h2>
+            <div class="actions">
+              <button id="resume-button" class="button button-secondary">Resume From Checkpoint</button>
+              <button id="fresh-button" class="button button-secondary">Start Fresh</button>
+              <button id="clear-caches-button" class="button button-ghost">Clear Caches</button>
+            </div>
+            <p id="checkpoint-status" class="muted">No saved checkpoint.</p>
+          </section>
+
+          <section class="card">
+            <p class="eyebrow">Telemetry</p>
+            <h2>Rate-limit watch</h2>
+            <div class="timeline compact-list">
+              <div class="timeline-step compact-step">
+                <span class="timeline-index">RL</span>
+                <p id="telemetry-last-429">No 429s recorded.</p>
+              </div>
+              <div class="timeline-step compact-step">
+                <span class="timeline-index">RT</span>
+                <p id="telemetry-retry-delay">No retry delay active.</p>
+              </div>
+              <div class="timeline-step compact-step">
+                <span class="timeline-index">BT</span>
+                <p id="telemetry-batch">No batch started.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="card">
+            <p class="eyebrow">Run Log</p>
+            <h2>Recent attempts</h2>
+            <ul id="run-log" class="results-list"></ul>
+          </section>
+        </aside>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

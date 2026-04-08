@@ -1,0 +1,8 @@
+{
+  "client_id": "your_spotify_client_id",
+  "refresh_token": "your_spotify_refresh_token",
+  "playlist_id": "",
+  "playlist_name": "Weekly Release Radar",
+  "minimum_saved_tracks_per_artist": 2,
+  "release_day": "FRIDAY"
+}
