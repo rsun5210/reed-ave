@@ -39,6 +39,8 @@ const maxSpotifyRetries = 8;
 const releaseBatchSize = 25;
 const batchPauseMilliseconds = 1500;
 const maxRunLogEntries = 12;
+const artistDetailsBatchSize = 10;
+const artistDetailsPauseMilliseconds = 750;
 
 const clientIdInput = document.querySelector("#client-id");
 const redirectUriInput = document.querySelector("#redirect-uri");
@@ -534,10 +536,10 @@ async function hydrateArtistDetails(artistIds, accessToken) {
     }
   }
 
-  for (let index = 0; index < missingArtistIds.length; index += 50) {
-    const end = Math.min(index + 50, missingArtistIds.length);
+  for (let index = 0; index < missingArtistIds.length; index += artistDetailsBatchSize) {
+    const end = Math.min(index + artistDetailsBatchSize, missingArtistIds.length);
     setStatus(`Fetching artist details ${end} of ${missingArtistIds.length}...`);
-    const ids = missingArtistIds.slice(index, index + 50).join(",");
+    const ids = missingArtistIds.slice(index, index + artistDetailsBatchSize).join(",");
     const response = await spotifyGet(`/artists?ids=${ids}`, accessToken);
 
     for (const artist of response.artists ?? []) {
@@ -546,9 +548,14 @@ async function hydrateArtistDetails(artistIds, accessToken) {
         cache[artist.id] = artist;
       }
     }
+
+    setStoredJson(storageKeys.artistDetailsCache, cache);
+
+    if (end < missingArtistIds.length) {
+      await wait(artistDetailsPauseMilliseconds);
+    }
   }
 
-  setStoredJson(storageKeys.artistDetailsCache, cache);
   return details;
 }
 
