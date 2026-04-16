@@ -9,6 +9,7 @@ const storageKeys = {
   libraryCache: "spotify_library_cache_v1",
   libraryLatestAddedAt: "spotify_library_latest_added_at",
   libraryLastFullScanAt: "spotify_library_last_full_scan_at",
+  qualifiedArtistsCache: "spotify_qualified_artists_cache_v1",
   artistDetailsCache: "spotify_artist_details_cache_v1",
   releaseCache: "spotify_release_cache_v1",
   albumTrackCache: "spotify_album_track_cache_v1",
@@ -481,6 +482,23 @@ async function fetchSavedLibraryArtists(accessToken) {
   const cachedLibrary = getStoredJson(storageKeys.libraryCache, []);
   const latestCachedAddedAt = localStorage.getItem(storageKeys.libraryLatestAddedAt) ?? "";
   const libraryItems = await syncLibraryCache(cachedLibrary, latestCachedAddedAt, accessToken);
+  const shouldFilterGenres = isGenreFilterEnabled();
+  const activeLatestAddedAt = localStorage.getItem(storageKeys.libraryLatestAddedAt) ?? "";
+  const qualifiedArtistsCache = getStoredJson(storageKeys.qualifiedArtistsCache, null);
+  const qualifiedArtistsCacheKey = buildQualifiedArtistsCacheKey({
+    latestAddedAt: activeLatestAddedAt,
+    libraryCount: libraryItems.length,
+    shouldFilterGenres,
+  });
+
+  if (
+    qualifiedArtistsCache?.key === qualifiedArtistsCacheKey &&
+    Array.isArray(qualifiedArtistsCache.entries)
+  ) {
+    setStatus("Using cached qualifying artists...");
+    return qualifiedArtistsCache.entries;
+  }
+
   const artistCounts = new Map();
   let processedTracks = 0;
 
@@ -509,7 +527,19 @@ async function fetchSavedLibraryArtists(accessToken) {
     .sort((a, b) => b.savedTrackCount - a.savedTrackCount);
 
   if (!qualifyingArtists.length) {
+    setStoredJson(storageKeys.qualifiedArtistsCache, {
+      key: qualifiedArtistsCacheKey,
+      entries: [],
+    });
     return [];
+  }
+
+  if (!shouldFilterGenres) {
+    setStoredJson(storageKeys.qualifiedArtistsCache, {
+      key: qualifiedArtistsCacheKey,
+      entries: qualifyingArtists,
+    });
+    return qualifyingArtists;
   }
 
   setStatus("Hydrating artist details...");
@@ -518,14 +548,19 @@ async function fetchSavedLibraryArtists(accessToken) {
     accessToken
   );
 
-  const shouldFilterGenres = isGenreFilterEnabled();
-
-  return qualifyingArtists
+  const filteredArtists = qualifyingArtists
     .map((entry) => ({
       ...entry,
       artist: detailedArtists.get(entry.artist.id) || entry.artist,
     }))
-    .filter((entry) => !shouldFilterGenres || !isExcludedArtist(entry.artist));
+    .filter((entry) => !isExcludedArtist(entry.artist));
+
+  setStoredJson(storageKeys.qualifiedArtistsCache, {
+    key: qualifiedArtistsCacheKey,
+    entries: filteredArtists,
+  });
+
+  return filteredArtists;
 }
 
 async function hydrateArtistDetails(artistIds, accessToken) {
@@ -581,6 +616,10 @@ function persistGenreFilterPreference() {
     storageKeys.genreFilterEnabled,
     genreFilterEnabledInput.checked ? "true" : "false"
   );
+}
+
+function buildQualifiedArtistsCacheKey({ latestAddedAt, libraryCount, shouldFilterGenres }) {
+  return [latestAddedAt || "none", libraryCount, shouldFilterGenres ? "filtered" : "unfiltered"].join(":");
 }
 
 async function fetchReleaseCandidates(weightedArtists, accessToken, releaseWindow) {
@@ -984,6 +1023,7 @@ function clearCaches() {
     storageKeys.libraryCache,
     storageKeys.libraryLatestAddedAt,
     storageKeys.libraryLastFullScanAt,
+    storageKeys.qualifiedArtistsCache,
     storageKeys.artistDetailsCache,
     storageKeys.releaseCache,
     storageKeys.albumTrackCache,
