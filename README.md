@@ -30,6 +30,34 @@ The browser UI in this repo is a static site, so it can be deployed directly to 
 
 Use the same exact URL in Spotify that you will use when pressing `Connect Spotify` in production.
 
+## Saving snapshots
+
+This project is already tracked in git, so the current program can be saved as a commit or tag.
+
+For future edits, run:
+
+```bash
+./save-snapshot.sh
+```
+
+That helper will:
+
+1. Create a git commit if you have uncommitted changes.
+2. Create an annotated git tag like `save-20260415-215500`.
+
+You can also pass a custom commit message:
+
+```bash
+./save-snapshot.sh "Tune genre filtering"
+```
+
+To inspect or restore a saved point later:
+
+```bash
+git tag
+git checkout save-YYYYMMDD-HHMMSS
+```
+
 The shell runner uses:
 
 - `GET /me/tracks` to scan liked songs.
