@@ -11,7 +11,7 @@ const storageKeys = {
   libraryLastFullScanAt: "spotify_library_last_full_scan_at",
   qualifiedArtistsCache: "spotify_qualified_artists_cache_v1",
   artistDetailsCache: "spotify_artist_details_cache_v1",
-  releaseCache: "spotify_release_cache_v2",
+  releaseCache: "spotify_release_cache_v3",
   albumTrackCache: "spotify_album_track_cache_v1",
   lastRunSummary: "spotify_last_run_summary_v1",
   batchCheckpoint: "spotify_batch_checkpoint_v1",
@@ -627,6 +627,7 @@ async function fetchReleaseCandidates(weightedArtists, accessToken, releaseWindo
   const candidates = [];
   const releaseCache = getStoredJson(storageKeys.releaseCache, {});
   const albumTrackCache = getStoredJson(storageKeys.albumTrackCache, {});
+  const shouldFilterGenres = isGenreFilterEnabled();
   const activeWindowKey = `${releaseWindow.start}:${releaseWindow.endExclusive}`;
   const cachedWindow = releaseCache[activeWindowKey] ?? {};
   const checkpoint = getBatchCheckpoint();
@@ -712,7 +713,16 @@ async function fetchReleaseCandidates(weightedArtists, accessToken, releaseWindo
           continue;
         }
 
-        const relevantTracks = selectRelevantTracks(tracks, artistId, album);
+        let relevantTracks = selectRelevantTracks(tracks, artistId, album);
+
+        if (shouldFilterGenres) {
+          relevantTracks = await filterTracksByExcludedGenres(
+            relevantTracks,
+            album,
+            artistId,
+            accessToken
+          );
+        }
 
         for (const track of relevantTracks) {
           const candidate = {
@@ -783,6 +793,46 @@ function selectRelevantTracks(tracks, artistId, album) {
 
 function isAlbumLevelMatch(album, artistId) {
   return (album.artists ?? []).some((artist) => artist.id === artistId);
+}
+
+async function filterTracksByExcludedGenres(tracks, album, matchedArtistId, accessToken) {
+  if (!tracks.length) {
+    return tracks;
+  }
+
+  const contributorArtistIds = new Set();
+
+  for (const artist of album.artists ?? []) {
+    if (artist?.id && artist.id !== matchedArtistId) {
+      contributorArtistIds.add(artist.id);
+    }
+  }
+
+  for (const track of tracks) {
+    for (const artist of track.artists ?? []) {
+      if (artist?.id && artist.id !== matchedArtistId) {
+        contributorArtistIds.add(artist.id);
+      }
+    }
+  }
+
+  if (!contributorArtistIds.size) {
+    return tracks;
+  }
+
+  const contributorDetails = await hydrateArtistDetails([...contributorArtistIds], accessToken);
+
+  return tracks.filter((track) => {
+    const contributors = [...(album.artists ?? []), ...(track.artists ?? [])];
+
+    return !contributors.some((artist) => {
+      if (!artist?.id || artist.id === matchedArtistId) {
+        return false;
+      }
+
+      return isExcludedArtist(contributorDetails.get(artist.id) || artist);
+    });
+  });
 }
 
 function scoreRelease(track, album, savedTrackCount, releaseWindow) {
