@@ -105,6 +105,13 @@ body::before {
   color: #c5d7ff;
 }
 
+.hero-kicker {
+  margin-bottom: 14px;
+  color: #dbe7ff;
+  font-size: 0.98rem;
+  letter-spacing: 0.02em;
+}
+
 h1,
 h2,
 p {
@@ -198,6 +205,9 @@ h2 {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.03));
   border: 1px solid rgba(255, 255, 255, 0.08);
   min-height: 112px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
   transition:
     transform 180ms ease,
     border-color 180ms ease,
@@ -333,6 +343,18 @@ h2 {
 .section-note {
   margin-bottom: 0;
   max-width: 54ch;
+}
+
+.telemetry-card {
+  background:
+    radial-gradient(circle at top right, rgba(123, 224, 255, 0.11), transparent 32%),
+    var(--panel);
+}
+
+.log-card {
+  background:
+    radial-gradient(circle at top right, rgba(255, 215, 122, 0.1), transparent 30%),
+    var(--panel);
 }
 
 .button {
@@ -590,6 +612,13 @@ h2 {
 
 .compact-step p {
   color: #dbe7ff;
+}
+
+#checkpoint-status,
+#telemetry-last-429,
+#telemetry-retry-delay,
+#telemetry-batch {
+  line-height: 1.5;
 }
 
 .hidden {

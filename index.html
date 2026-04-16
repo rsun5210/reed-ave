@@ -11,6 +11,7 @@
       <section class="hero">
         <div class="hero-copy">
           <p class="eyebrow">Release Radar</p>
+          <p class="hero-kicker">Browser playlist builder for the artists you actually save</p>
           <h1>Your weekly release pulse, built from the artists you actually save.</h1>
           <p class="lede">
             Connect Spotify, scan your liked songs, and generate a Friday radar that
@@ -66,6 +67,9 @@
           <section class="card">
             <p class="eyebrow">Setup</p>
             <h2>Spotify connection</h2>
+            <p class="muted section-note">
+              Use your own Spotify app credentials here so the flow runs in your browser session.
+            </p>
             <div class="field-grid">
               <label class="field">
                 <span>Spotify Client ID</span>
@@ -193,7 +197,7 @@
             <p id="checkpoint-status" class="muted">No saved checkpoint.</p>
           </section>
 
-          <section class="card">
+          <section class="card telemetry-card">
             <p class="eyebrow">Telemetry</p>
             <h2>Rate-limit watch</h2>
             <div class="timeline compact-list">
@@ -212,7 +216,7 @@
             </div>
           </section>
 
-          <section class="card">
+          <section class="card log-card">
             <p class="eyebrow">Run Log</p>
             <h2>Recent attempts</h2>
             <ul id="run-log" class="results-list"></ul>
