@@ -4,6 +4,7 @@ const storageKeys = {
   expiresAt: "spotify_expires_at",
   codeVerifier: "spotify_code_verifier",
   clientId: "spotify_client_id",
+  genreFilterEnabled: "spotify_genre_filter_enabled",
   playlistId: "spotify_playlist_id",
   libraryCache: "spotify_library_cache_v1",
   libraryLatestAddedAt: "spotify_library_latest_added_at",
@@ -52,6 +53,7 @@ const resumeButton = document.querySelector("#resume-button");
 const freshButton = document.querySelector("#fresh-button");
 const clearCachesButton = document.querySelector("#clear-caches-button");
 const playlistNameInput = document.querySelector("#playlist-name");
+const genreFilterEnabledInput = document.querySelector("#genre-filter-enabled");
 const statusNode = document.querySelector("#status");
 const statWindow = document.querySelector("#stat-window");
 const statQualifiedArtists = document.querySelector("#stat-qualified-artists");
@@ -89,6 +91,7 @@ resumeButton.addEventListener("click", () => runRadar({ mode: "build", startFres
 freshButton.addEventListener("click", () => runRadar({ mode: "build", startFresh: true }));
 clearCachesButton.addEventListener("click", clearCaches);
 exportConfigButton.addEventListener("click", showAutomationConfig);
+genreFilterEnabledInput.addEventListener("change", persistGenreFilterPreference);
 
 async function bootstrap() {
   updateWindowStat(getActiveFridayWindow());
@@ -100,6 +103,7 @@ async function bootstrap() {
   setRunControlsDisabled(false);
   redirectUriInput.value = `${window.location.origin}${window.location.pathname}`;
   clientIdInput.value = localStorage.getItem(storageKeys.clientId) ?? "";
+  genreFilterEnabledInput.checked = isGenreFilterEnabled();
 
   const params = new URLSearchParams(window.location.search);
   const authCode = params.get("code");
@@ -514,12 +518,14 @@ async function fetchSavedLibraryArtists(accessToken) {
     accessToken
   );
 
+  const shouldFilterGenres = isGenreFilterEnabled();
+
   return qualifyingArtists
     .map((entry) => ({
       ...entry,
       artist: detailedArtists.get(entry.artist.id) || entry.artist,
     }))
-    .filter((entry) => !isExcludedArtist(entry.artist));
+    .filter((entry) => !shouldFilterGenres || !isExcludedArtist(entry.artist));
 }
 
 async function hydrateArtistDetails(artistIds, accessToken) {
@@ -564,6 +570,17 @@ async function hydrateArtistDetails(artistIds, accessToken) {
 function isExcludedArtist(artist) {
   const genres = (artist?.genres ?? []).join(" ").toLowerCase();
   return excludedGenreKeywords.some((keyword) => genres.includes(keyword));
+}
+
+function isGenreFilterEnabled() {
+  return (localStorage.getItem(storageKeys.genreFilterEnabled) ?? "true") !== "false";
+}
+
+function persistGenreFilterPreference() {
+  localStorage.setItem(
+    storageKeys.genreFilterEnabled,
+    genreFilterEnabledInput.checked ? "true" : "false"
+  );
 }
 
 async function fetchReleaseCandidates(weightedArtists, accessToken, releaseWindow) {

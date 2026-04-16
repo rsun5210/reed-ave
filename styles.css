@@ -201,6 +201,12 @@ h2 {
   display: block;
 }
 
+.field-checkbox {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
 .field span {
   display: block;
   margin-bottom: 8px;
@@ -220,6 +226,25 @@ h2 {
 .field input:focus {
   outline: 2px solid rgba(123, 224, 255, 0.35);
   border-color: rgba(123, 224, 255, 0.6);
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  color: var(--text);
+}
+
+.checkbox-row span {
+  margin-bottom: 0;
+  color: var(--text);
+}
+
+.checkbox-row input {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  flex: 0 0 auto;
 }
 
 .actions {
