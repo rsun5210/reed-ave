@@ -22,7 +22,7 @@
             <button id="generate-button" class="button button-secondary">Build This Week's Radar</button>
             <button id="prep-button" class="button button-secondary">Thursday Prep</button>
           </div>
-          <p id="status" class="status">Not connected.</p>
+          <p id="status" class="status" role="status" aria-live="polite">Not connected.</p>
         </div>
 
         <aside class="hero-panel">
@@ -65,11 +65,13 @@
               <label class="field">
                 <span>Spotify Client ID</span>
                 <input id="client-id" type="text" placeholder="Paste your Spotify app client ID" />
+                <small class="field-hint">Each person can use their own Spotify developer app here.</small>
               </label>
 
               <label class="field">
                 <span>Redirect URI</span>
                 <input id="redirect-uri" type="text" />
+                <small class="field-hint">This should exactly match a Redirect URI in your Spotify app settings.</small>
               </label>
             </div>
 
@@ -112,6 +114,7 @@
               <label class="field">
                 <span>Playlist name</span>
                 <input id="playlist-name" type="text" value="Release Radar" />
+                <small class="field-hint">Use the same name to keep updating one playlist, or change it to create a new one.</small>
               </label>
 
               <div class="field field-checkbox">
@@ -120,6 +123,7 @@
                   <input id="genre-filter-enabled" type="checkbox" checked />
                   <span>Exclude rap, hip hop, trap, drill, and grime artists</span>
                 </label>
+                <small class="field-hint">Turn this off for a broader scan or if you want a lighter first pass.</small>
               </div>
             </div>
           </section>
@@ -138,7 +142,7 @@
           </section>
         </section>
 
-        <aside class="stack">
+        <aside class="stack sidebar-stack">
           <section class="card accent-card">
             <p class="eyebrow">Flow</p>
             <h2>How this radar works</h2>
@@ -173,6 +177,9 @@
           <section class="card">
             <p class="eyebrow">Controls</p>
             <h2>Run management</h2>
+            <p class="muted section-note">
+              Use prep for a lighter cache warmup, or resume if a long run was interrupted.
+            </p>
             <div class="actions">
               <button id="resume-button" class="button button-secondary">Resume From Checkpoint</button>
               <button id="fresh-button" class="button button-secondary">Start Fresh</button>
