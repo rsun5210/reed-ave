@@ -539,10 +539,12 @@ async function hydrateArtistDetails(artistIds, accessToken) {
   for (let index = 0; index < missingArtistIds.length; index += artistDetailsBatchSize) {
     const end = Math.min(index + artistDetailsBatchSize, missingArtistIds.length);
     setStatus(`Fetching artist details ${end} of ${missingArtistIds.length}...`);
-    const ids = missingArtistIds.slice(index, index + artistDetailsBatchSize).join(",");
-    const response = await spotifyGet(`/artists?ids=${ids}`, accessToken);
+    const batchIds = missingArtistIds.slice(index, index + artistDetailsBatchSize);
+    const responses = await Promise.all(
+      batchIds.map((artistId) => spotifyGet(`/artists/${artistId}`, accessToken))
+    );
 
-    for (const artist of response.artists ?? []) {
+    for (const artist of responses) {
       if (artist?.id) {
         details.set(artist.id, artist);
         cache[artist.id] = artist;
@@ -825,11 +827,11 @@ async function findExistingPlaylist(userId, playlistName, accessToken) {
 
 async function replacePlaylistTracks(playlistId, uris, accessToken) {
   const firstBatch = uris.slice(0, 100);
-  await spotifyPut(`/playlists/${playlistId}/tracks`, { uris: firstBatch }, accessToken);
+  await spotifyPut(`/playlists/${playlistId}/items`, { uris: firstBatch }, accessToken);
 
   for (let index = 100; index < uris.length; index += 100) {
     const batch = uris.slice(index, index + 100);
-    await spotifyPost(`/playlists/${playlistId}/tracks`, { uris: batch }, accessToken);
+    await spotifyPost(`/playlists/${playlistId}/items`, { uris: batch }, accessToken);
   }
 }
 
@@ -849,11 +851,11 @@ async function getPlaylistTrackUris(playlistId, accessToken) {
 
   while (true) {
     const page = await spotifyGet(
-      `/playlists/${playlistId}/tracks?fields=items(track(uri)),next,total&limit=100&offset=${offset}`,
+      `/playlists/${playlistId}/items?fields=items(item(uri)),next,total&limit=100&offset=${offset}`,
       accessToken
     );
     const items = page.items ?? [];
-    uris.push(...items.map((item) => item.track?.uri).filter(Boolean));
+    uris.push(...items.map((item) => item.item?.uri).filter(Boolean));
 
     if (items.length < 100) {
       break;
