@@ -22,7 +22,7 @@ CACHE_DIR="${SPOTIFY_RADAR_CACHE_DIR:-$ROOT_DIR/.release-radar-cache}"
 STATE_FILE="$CACHE_DIR/state.json"
 LIBRARY_CACHE_FILE="$CACHE_DIR/library.jsonl"
 GENRE_CACHE_FILE="$CACHE_DIR/artist_genres.json"
-RELEASE_CACHE_DIR="$CACHE_DIR/release_windows_v2"
+RELEASE_CACHE_DIR="$CACHE_DIR/release_windows_v3"
 ALBUM_TRACK_CACHE_DIR="$CACHE_DIR/album_tracks_v2"
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
@@ -582,11 +582,11 @@ for (( artist_index=0; artist_index<qualified_count; artist_index++ )); do
       write_json_file "$album_track_cache_file" "$tracks_page"
     fi
 
-    release_tracks="$(printf '%s' "$tracks_page" | "$JQ_BIN" --arg artist_id "$artist_id" --arg album_group "$(printf '%s' "$album" | "$JQ_BIN" -r '.album_group // ""')" '
-      if $album_group == "appears_on" then
-        map(select(any(.artists[]; .id == $artist_id)))
-      else
+    release_tracks="$(printf '%s' "$tracks_page" | "$JQ_BIN" --arg artist_id "$artist_id" --argjson album_artists "$(printf '%s' "$album" | "$JQ_BIN" '.artists // []')" '
+      if any($album_artists[]?; .id == $artist_id) then
         .
+      else
+        map(select(any(.artists[]; .id == $artist_id)))
       end
     ')"
 

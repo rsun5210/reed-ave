@@ -11,7 +11,7 @@ const storageKeys = {
   libraryLastFullScanAt: "spotify_library_last_full_scan_at",
   qualifiedArtistsCache: "spotify_qualified_artists_cache_v1",
   artistDetailsCache: "spotify_artist_details_cache_v1",
-  releaseCache: "spotify_release_cache_v1",
+  releaseCache: "spotify_release_cache_v2",
   albumTrackCache: "spotify_album_track_cache_v1",
   lastRunSummary: "spotify_last_run_summary_v1",
   batchCheckpoint: "spotify_batch_checkpoint_v1",
@@ -772,13 +772,17 @@ async function fetchReleaseCandidates(weightedArtists, accessToken, releaseWindo
 }
 
 function selectRelevantTracks(tracks, artistId, album) {
-  if (album.album_group !== "appears_on") {
+  if (isAlbumLevelMatch(album, artistId)) {
     return tracks;
   }
 
   return tracks.filter((track) =>
     (track.artists ?? []).some((artist) => artist.id === artistId)
   );
+}
+
+function isAlbumLevelMatch(album, artistId) {
+  return (album.artists ?? []).some((artist) => artist.id === artistId);
 }
 
 function scoreRelease(track, album, savedTrackCount, releaseWindow) {
