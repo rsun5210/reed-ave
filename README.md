@@ -62,7 +62,7 @@ The shell runner uses:
 
 - `GET /me/tracks` to scan liked songs.
 - Artists with at least `2` liked songs.
-- Releases and featured appearances from the previous Friday through the current Friday window.
+- Releases and featured appearances in the current Saturday-to-Friday window.
 - All tracks from qualifying releases, plus featured tracks where the artist actually appears.
 - Create-or-update behavior for a single private playlist.
 - Weekly runs keep all qualifying artists, but skip individual artists or albums that keep hitting Spotify rate limits.

@@ -357,7 +357,7 @@ async function runRadar({ mode = "build", startFresh = false, requireCheckpoint 
   resultsTitle.textContent = isPrepOnly ? "Preparing Thursday cache..." : "Building your weekly radar...";
   resultsSummary.textContent = isPrepOnly
     ? "Scanning liked songs and caching this week's releases without publishing playlist changes yet."
-    : "Scanning liked songs, counting artists, and finding releases from last Friday through this Friday plus featured appearances.";
+    : "Scanning liked songs, counting artists, and finding this week's Saturday-to-Friday releases plus featured appearances.";
   renderResultsPlaceholder("Run in progress. Progress details will appear here as the scan moves forward.");
   configOutput.classList.add("hidden");
   updateWindowStat(releaseWindow);
@@ -1492,7 +1492,7 @@ function getActiveFridayWindow() {
   friday.setDate(friday.getDate() + daysUntilFriday);
 
   const start = new Date(friday);
-  start.setDate(friday.getDate() - 7);
+  start.setDate(friday.getDate() - 6);
 
   const endExclusive = new Date(friday);
   endExclusive.setDate(friday.getDate() + 1);

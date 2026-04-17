@@ -512,7 +512,7 @@ week_release_cache_path() {
 }
 
 WINDOW_INCLUSIVE_END="$("$DATE_BIN" -vfri +%F)"
-WINDOW_START="$("$DATE_BIN" -j -v-7d -f %F "$WINDOW_INCLUSIVE_END" +%F)"
+WINDOW_START="$("$DATE_BIN" -j -v-6d -f %F "$WINDOW_INCLUSIVE_END" +%F)"
 WINDOW_END_EXCLUSIVE="$("$DATE_BIN" -j -v+1d -f %F "$WINDOW_INCLUSIVE_END" +%F)"
 
 log "Scanning liked songs for artists with $MIN_SAVED_TRACKS+ saved tracks..."
