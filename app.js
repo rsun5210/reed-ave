@@ -228,10 +228,10 @@ async function exchangeCodeForToken(code) {
     }),
   });
 
-  const data = await response.json();
+  const data = await safeParseJson(response);
 
   if (!response.ok) {
-    setStatus(data.error_description || "Spotify token exchange failed.");
+    setStatus(data?.error_description || "Spotify token exchange failed.");
     return;
   }
 
@@ -259,9 +259,9 @@ async function refreshAccessToken() {
     }),
   });
 
-  const data = await response.json();
+  const data = await safeParseJson(response);
 
-  if (!response.ok) {
+  if (!response.ok || !data?.access_token) {
     return null;
   }
 
@@ -282,10 +282,10 @@ async function loadProfile(accessToken) {
     },
   });
 
-  const profile = await response.json();
+  const profile = await safeParseJson(response);
 
   if (!response.ok) {
-    setStatus(profile.error?.message || "Could not load Spotify profile.");
+    setStatus(profile?.error?.message || "Could not load Spotify profile.");
     return;
   }
 
@@ -357,7 +357,7 @@ async function runRadar({ mode = "build", startFresh = false, requireCheckpoint 
   resultsTitle.textContent = isPrepOnly ? "Preparing Thursday cache..." : "Building your weekly radar...";
   resultsSummary.textContent = isPrepOnly
     ? "Scanning liked songs and caching this week's releases without publishing playlist changes yet."
-    : "Scanning liked songs, counting artists, and finding this week's Saturday-to-Friday releases plus featured appearances.";
+    : "Scanning liked songs, counting artists, and finding this week's Friday-to-Thursday releases plus featured appearances.";
   renderResultsPlaceholder("Run in progress. Progress details will appear here as the scan moves forward.");
   configOutput.classList.add("hidden");
   updateWindowStat(releaseWindow);
@@ -1209,10 +1209,10 @@ async function spotifyRequest(path, init, accessToken) {
       continue;
     }
 
-    const data = await response.json();
+    const data = await safeParseJson(response);
 
     if (!response.ok) {
-      throw new Error(data.error?.message || "Spotify API request failed.");
+      throw new Error(data?.error?.message || "Spotify API request failed.");
     }
 
     return data;
@@ -1488,14 +1488,14 @@ function getActiveFridayWindow() {
   const day = friday.getDay();
   const daysUntilFriday = (5 - day + 7) % 7;
 
-  friday.setHours(0, 0, 0, 0);
+  friday.setHours(1, 0, 0, 0);
   friday.setDate(friday.getDate() + daysUntilFriday);
 
   const start = new Date(friday);
-  start.setDate(friday.getDate() - 6);
+  start.setDate(friday.getDate());
 
   const endExclusive = new Date(friday);
-  endExclusive.setDate(friday.getDate() + 1);
+  endExclusive.setDate(friday.getDate() + 7);
 
   return {
     start: toDateString(start),
@@ -1529,6 +1529,19 @@ function isWithinWindow(dateString, releaseWindow) {
   return (
     dateString >= releaseWindow.start && dateString < releaseWindow.endExclusive
   );
+}
+
+async function safeParseJson(response) {
+  const text = await response.text();
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    return null;
+  }
 }
 
 function getDayDifference(laterDateString, earlierDateString) {
