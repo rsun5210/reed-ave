@@ -695,9 +695,10 @@ async function fetchReleaseCandidates(weightedArtists, accessToken, releaseWindo
   const albumTrackCache = getStoredJson(storageKeys.albumTrackCache, {});
   const shouldFilterGenres = isGenreFilterEnabled();
   const activeWindowKey = `${releaseWindow.start}:${releaseWindow.endExclusive}`;
-  const cachedWindow = releaseCache[activeWindowKey] ?? {};
+  const shouldBypassReleaseCache = isWindowEndToday(releaseWindow);
+  const cachedWindow = shouldBypassReleaseCache ? {} : releaseCache[activeWindowKey] ?? {};
   const checkpoint = getBatchCheckpoint();
-  const hasMatchingCheckpoint = checkpoint?.windowKey === activeWindowKey;
+  const hasMatchingCheckpoint = !shouldBypassReleaseCache && checkpoint?.windowKey === activeWindowKey;
   const restoredCandidates = hasMatchingCheckpoint ? checkpoint.candidates ?? [] : [];
 
   if (restoredCandidates.length) {
@@ -1529,6 +1530,10 @@ function isWithinWindow(dateString, releaseWindow) {
   return (
     dateString >= releaseWindow.start && dateString < releaseWindow.endExclusive
   );
+}
+
+function isWindowEndToday(releaseWindow) {
+  return toDateString(new Date()) === getInclusiveWindowEnd(releaseWindow);
 }
 
 async function safeParseJson(response) {
