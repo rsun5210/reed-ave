@@ -5,6 +5,7 @@ const storageKeys = {
   codeVerifier: "spotify_code_verifier",
   clientId: "spotify_client_id",
   genreFilterEnabled: "spotify_genre_filter_enabled",
+  setupCollapsed: "spotify_setup_collapsed",
   playlistId: "spotify_playlist_id",
   libraryCache: "spotify_library_cache_v1",
   libraryLatestAddedAt: "spotify_library_latest_added_at",
@@ -55,6 +56,9 @@ const freshButton = document.querySelector("#fresh-button");
 const clearCachesButton = document.querySelector("#clear-caches-button");
 const playlistNameInput = document.querySelector("#playlist-name");
 const genreFilterEnabledInput = document.querySelector("#genre-filter-enabled");
+const setupCard = document.querySelector("#setup-card");
+const setupCardBody = document.querySelector("#setup-card-body");
+const setupToggleButton = document.querySelector("#setup-toggle-button");
 const statusNode = document.querySelector("#status");
 const statWindow = document.querySelector("#stat-window");
 const statQualifiedArtists = document.querySelector("#stat-qualified-artists");
@@ -73,6 +77,16 @@ const resultsCard = document.querySelector("#results-card");
 const resultsTitle = document.querySelector("#results-title");
 const resultsSummary = document.querySelector("#results-summary");
 const resultsList = document.querySelector("#results-list");
+const runStatePanel = document.querySelector("#run-state-panel");
+const runModeLabel = document.querySelector("#run-mode-label");
+const runProgressLabel = document.querySelector("#run-progress-label");
+const runProgressFill = document.querySelector("#run-progress-fill");
+const settingsStrip = document.querySelector("#settings-strip");
+const settingsMode = document.querySelector("#settings-mode");
+const settingsPlaylist = document.querySelector("#settings-playlist");
+const settingsFilter = document.querySelector("#settings-filter");
+const settingsWindowPill = document.querySelector("#settings-window-pill");
+const lastPlaylistLink = document.querySelector("#last-playlist-link");
 const automationCard = document.querySelector("#automation-card");
 const exportConfigButton = document.querySelector("#export-config-button");
 const configOutput = document.querySelector("#config-output");
@@ -92,7 +106,12 @@ resumeButton.addEventListener("click", () => runRadar({ mode: "build", startFres
 freshButton.addEventListener("click", () => runRadar({ mode: "build", startFresh: true }));
 clearCachesButton.addEventListener("click", clearCaches);
 exportConfigButton.addEventListener("click", showAutomationConfig);
-genreFilterEnabledInput.addEventListener("change", persistGenreFilterPreference);
+genreFilterEnabledInput.addEventListener("change", () => {
+  persistGenreFilterPreference();
+  updateSettingsSummary();
+});
+playlistNameInput.addEventListener("input", updateSettingsSummary);
+setupToggleButton.addEventListener("click", toggleSetupCard);
 
 async function bootstrap() {
   updateWindowStat(getActiveFridayWindow());
@@ -105,6 +124,9 @@ async function bootstrap() {
   redirectUriInput.value = `${window.location.origin}${window.location.pathname}`;
   clientIdInput.value = localStorage.getItem(storageKeys.clientId) ?? "";
   genreFilterEnabledInput.checked = isGenreFilterEnabled();
+  updateSettingsSummary();
+  updateLastPlaylistLink();
+  applySetupCardState();
 
   const params = new URLSearchParams(window.location.search);
   const authCode = params.get("code");
@@ -281,6 +303,8 @@ async function loadProfile(accessToken) {
   profileCard.classList.remove("hidden");
   nextStepCard.classList.remove("hidden");
   automationCard.classList.remove("hidden");
+  setupToggleButton.classList.remove("hidden");
+  applySetupCardState();
   setStatus("Spotify connected successfully.");
 }
 
@@ -315,18 +339,26 @@ async function runRadar({ mode = "build", startFresh = false, requireCheckpoint 
   const playlistName = playlistNameInput.value.trim() || "Release Radar";
   const releaseWindow = getActiveFridayWindow();
   const isPrepOnly = mode === "prep";
+  const activeRunModeLabel = getRunModeLabel({ mode, startFresh, requireCheckpoint });
 
   setStatus(
     isPrepOnly
       ? "Preparing cache from your artists and recent releases..."
       : "Collecting your artists and recent releases..."
   );
+  updateSettingsSummary({ runModeLabel: activeRunModeLabel, releaseWindow });
   resultsCard.classList.remove("hidden");
+  renderRunState({
+    visible: true,
+    modeLabel: activeRunModeLabel,
+    progressLabel: isPrepOnly ? "Preparing cache and release data..." : "Starting full playlist build...",
+    percent: 6,
+  });
   resultsTitle.textContent = isPrepOnly ? "Preparing Thursday cache..." : "Building your weekly radar...";
   resultsSummary.textContent = isPrepOnly
     ? "Scanning liked songs and caching this week's releases without publishing playlist changes yet."
     : "Scanning liked songs, counting artists, and finding this week's Saturday-to-Friday releases plus featured appearances.";
-  resultsList.innerHTML = "";
+  renderResultsPlaceholder("Run in progress. Progress details will appear here as the scan moves forward.");
   configOutput.classList.add("hidden");
   updateWindowStat(releaseWindow);
   updateRadarStats({
@@ -343,14 +375,28 @@ async function runRadar({ mode = "build", startFresh = false, requireCheckpoint 
 
   try {
     const profile = await spotifyGet("/me", accessToken);
+    renderRunState({
+      visible: true,
+      modeLabel: activeRunModeLabel,
+      progressLabel: "Reading your Spotify profile and liked songs...",
+      percent: 14,
+    });
     const weightedArtists = await fetchSavedLibraryArtists(accessToken);
     updateRadarStats({ qualifiedArtists: weightedArtists.length });
+    renderRunState({
+      visible: true,
+      modeLabel: activeRunModeLabel,
+      progressLabel: `Found ${weightedArtists.length} qualifying artists.`,
+      percent: 34,
+    });
 
     if (!weightedArtists.length) {
       setStatus("No eligible artists found in your liked songs yet.");
-      resultsTitle.textContent = "Not enough listening data yet";
-      resultsSummary.textContent =
-        "You need at least two saved songs by an artist for them to qualify.";
+      renderEmptyResults({
+        title: "Not enough listening data yet",
+        summary: "You need at least two saved songs by an artist for them to qualify.",
+        detail: "Save a little more music from the artists you want represented, then run the radar again.",
+      });
       return;
     }
 
@@ -360,13 +406,22 @@ async function runRadar({ mode = "build", startFresh = false, requireCheckpoint 
       releaseWindow
     );
     updateRadarStats({ releaseCount: releaseCandidates.length });
+    renderRunState({
+      visible: true,
+      modeLabel: activeRunModeLabel,
+      progressLabel: `Scanned this week's releases and found ${releaseCandidates.length} matches.`,
+      percent: 74,
+    });
 
     if (!releaseCandidates.length) {
       setStatus("No qualifying recent releases found this week.");
-      resultsTitle.textContent = "No fresh releases found";
-      resultsSummary.textContent = `Nothing from your qualifying artists was released between ${formatWindowDate(
-        releaseWindow.start
-      )} and ${formatWindowDate(getInclusiveWindowEnd(releaseWindow))}.`;
+      renderEmptyResults({
+        title: "No fresh releases found",
+        summary: `Nothing from your qualifying artists was released between ${formatWindowDate(
+          releaseWindow.start
+        )} and ${formatWindowDate(getInclusiveWindowEnd(releaseWindow))}.`,
+        detail: "Try again next Friday, or loosen the genre filter if you want a broader scan.",
+      });
       return;
     }
 
@@ -376,6 +431,12 @@ async function runRadar({ mode = "build", startFresh = false, requireCheckpoint 
     let playlistChanged = false;
 
     if (!isPrepOnly) {
+      renderRunState({
+        visible: true,
+        modeLabel: activeRunModeLabel,
+        progressLabel: `Preparing to sync ${tracks.length} playlist tracks to Spotify...`,
+        percent: 88,
+      });
       playlist = await upsertPlaylist(profile.id, playlistName, accessToken, releaseWindow);
       playlistChanged = await syncPlaylistDiff(
         playlist.id,
@@ -390,23 +451,7 @@ async function runRadar({ mode = "build", startFresh = false, requireCheckpoint 
       resultsSummary.textContent = `Cached ${releaseCandidates.length} release candidates for ${formatWindowDate(
         releaseWindow.start
       )} through ${formatWindowDate(getInclusiveWindowEnd(releaseWindow))}. Playlist sync was skipped.`;
-      resultsList.innerHTML = tracks
-        .slice(0, 20)
-        .map(
-          (entry, index) => `
-            <li class="result-item">
-              <span class="result-rank">${index + 1}</span>
-              <div class="result-copy">
-                <strong>${escapeHtml(entry.track.name)}</strong>
-                <span>${escapeHtml(entry.artist.name)} • ${escapeHtml(entry.album.name)}</span>
-              </div>
-              <div class="result-meta">
-                <span class="meta-pill">${escapeHtml(entry.album.release_date)}</span>
-              </div>
-            </li>
-          `
-        )
-        .join("");
+      renderTrackList(tracks.slice(0, 20), { showScore: false });
     }
 
     persistLastRunSummary({
@@ -421,6 +466,7 @@ async function runRadar({ mode = "build", startFresh = false, requireCheckpoint 
       mode,
       playlistChanged,
     });
+    updateLastPlaylistLink();
     updateLastRunStat();
     updateCacheFootprintStat();
     updateCheckpointStatus();
@@ -439,13 +485,33 @@ async function runRadar({ mode = "build", startFresh = false, requireCheckpoint 
           ? `Spotify playlist synced: ${playlist.name}`
           : `Playlist already up to date: ${playlist.name}`
     );
+    renderRunState({
+      visible: true,
+      modeLabel: activeRunModeLabel,
+      progressLabel: isPrepOnly
+        ? "Cache warmup finished successfully."
+        : playlistChanged
+          ? "Playlist synced successfully."
+          : "Playlist was already up to date.",
+      percent: 100,
+    });
   } catch (error) {
     console.error(error);
     setStatus(error.message || "Could not build the playlist.");
-    resultsTitle.textContent = "Playlist generation failed";
-    resultsSummary.textContent = "Check your Spotify app setup and try again.";
+    renderEmptyResults({
+      title: "Playlist generation failed",
+      summary: "Check your Spotify app setup and try again.",
+      detail: error.message || "Spotify rejected one of the requests during the run.",
+    });
     addRunLogEntry(`Run failed: ${error.message || "Unknown error"}`);
     renderRunLog();
+    renderRunState({
+      visible: true,
+      modeLabel: activeRunModeLabel,
+      progressLabel: error.message || "The run stopped before it could finish.",
+      percent: 100,
+      failed: true,
+    });
   } finally {
     isRunInProgress = false;
     setRunControlsDisabled(false);
@@ -991,24 +1057,7 @@ function renderResults(playlist, tracks, releaseWindow, playlistChanged = true) 
       ? `<a href="${playlist.external_urls.spotify}" target="_blank" rel="noreferrer">Open playlist</a>`
       : ""
   }`;
-
-  resultsList.innerHTML = tracks
-    .map(
-      (entry, index) => `
-        <li class="result-item">
-          <span class="result-rank">${index + 1}</span>
-          <div class="result-copy">
-            <strong>${escapeHtml(entry.track.name)}</strong>
-            <span>${escapeHtml(entry.artist.name)} • ${escapeHtml(entry.album.name)}</span>
-          </div>
-          <div class="result-meta">
-            <span class="meta-pill">${escapeHtml(entry.album.release_date)}</span>
-            <span class="meta-pill">Score ${entry.score}</span>
-          </div>
-        </li>
-      `
-    )
-    .join("");
+  renderTrackList(tracks, { showScore: true });
 }
 
 function showAutomationConfig() {
@@ -1049,6 +1098,9 @@ function disconnect(clearClientId = true) {
     clientIdInput.value = "";
   }
 
+  setupToggleButton.classList.add("hidden");
+  setSetupCollapsed(false);
+  applySetupCardState();
   profileCard.classList.add("hidden");
   nextStepCard.classList.add("hidden");
   automationCard.classList.add("hidden");
@@ -1064,6 +1116,7 @@ function disconnect(clearClientId = true) {
   updateCacheFootprintStat();
   updateCheckpointStatus();
   updateRateTelemetry();
+  renderRunState({ visible: false });
   setStatus("Not connected.");
 }
 
@@ -1225,13 +1278,13 @@ function updateCheckpointStatus() {
 function updateRateTelemetry() {
   const telemetry = getStoredJson(storageKeys.rateTelemetry, {});
   telemetryLast429.textContent = telemetry.last429At
-    ? `Last 429 at ${formatDateTime(telemetry.last429At)} on ${telemetry.lastPath ?? "Spotify request"}.`
+    ? `Last rate limit at ${formatDateTime(telemetry.last429At)} on ${telemetry.lastPath ?? "Spotify request"}.`
     : "No 429s recorded.";
   telemetryRetryDelay.textContent = telemetry.retryDelaySeconds
-    ? `Retry delay: ${telemetry.retryDelaySeconds}s`
+    ? `Current retry delay: ${telemetry.retryDelaySeconds}s`
     : "No retry delay active.";
   telemetryBatch.textContent = telemetry.totalBatches
-    ? `Batch ${telemetry.currentBatch ?? 0}/${telemetry.totalBatches}, completed ${telemetry.batchesCompleted ?? 0}.`
+    ? `Current release batch ${telemetry.currentBatch ?? 0} of ${telemetry.totalBatches}; completed ${telemetry.batchesCompleted ?? 0}.`
     : "No batch started.";
 }
 
@@ -1301,6 +1354,132 @@ function setRunControlsDisabled(disabled) {
 
 function setStatus(message) {
   statusNode.textContent = message;
+}
+
+function getRunModeLabel({ mode = "build", startFresh = false, requireCheckpoint = false } = {}) {
+  if (mode === "prep") {
+    return "Cache warmup";
+  }
+
+  if (requireCheckpoint) {
+    return "Resume checkpoint";
+  }
+
+  if (startFresh) {
+    return "Fresh rebuild";
+  }
+
+  return "Full build";
+}
+
+function renderRunState({
+  visible,
+  modeLabel = "Full build",
+  progressLabel = "Waiting to start.",
+  percent = 0,
+  failed = false,
+} = {}) {
+  runStatePanel.classList.toggle("hidden", !visible);
+  if (!visible) {
+    runStatePanel.classList.remove("is-failed");
+    runProgressFill.style.width = "0%";
+    return;
+  }
+
+  runStatePanel.classList.toggle("is-failed", failed);
+  runModeLabel.textContent = modeLabel;
+  runProgressLabel.textContent = progressLabel;
+  runProgressFill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+}
+
+function renderResultsPlaceholder(message) {
+  resultsList.innerHTML = `
+    <li class="result-item result-item-empty">
+      <div class="result-copy">
+        <strong>Run in progress</strong>
+        <span>${escapeHtml(message)}</span>
+      </div>
+    </li>
+  `;
+}
+
+function renderEmptyResults({ title, summary, detail }) {
+  resultsCard.classList.remove("hidden");
+  resultsTitle.textContent = title;
+  resultsSummary.textContent = summary;
+  resultsList.innerHTML = `
+    <li class="result-item result-item-empty">
+      <div class="result-copy">
+        <strong>${escapeHtml(title)}</strong>
+        <span>${escapeHtml(detail)}</span>
+      </div>
+    </li>
+  `;
+}
+
+function renderTrackList(tracks, { showScore = true } = {}) {
+  resultsList.innerHTML = tracks
+    .map(
+      (entry, index) => `
+        <li class="result-item">
+          <span class="result-rank">${index + 1}</span>
+          <div class="result-copy">
+            <strong>${escapeHtml(entry.track.name)}</strong>
+            <span>${escapeHtml(entry.artist.name)} • ${escapeHtml(entry.album.name)}</span>
+          </div>
+          <div class="result-meta">
+            <span class="meta-pill">${escapeHtml(entry.album.release_date)}</span>
+            ${showScore ? `<span class="meta-pill">Score ${entry.score}</span>` : ""}
+          </div>
+        </li>
+      `
+    )
+    .join("");
+}
+
+function updateSettingsSummary({
+  runModeLabel: activeRunModeLabel = "Full build",
+  releaseWindow = getActiveFridayWindow(),
+} = {}) {
+  settingsStrip.classList.remove("hidden");
+  settingsMode.textContent = `Mode: ${activeRunModeLabel}`;
+  settingsPlaylist.textContent = `Playlist: ${playlistNameInput.value.trim() || "Release Radar"}`;
+  settingsFilter.textContent = `Genre filter: ${isGenreFilterEnabled() ? "On" : "Off"}`;
+  settingsWindowPill.textContent = `Window: ${formatWindowDate(releaseWindow.start)} to ${formatWindowDate(
+    getInclusiveWindowEnd(releaseWindow)
+  )}`;
+}
+
+function updateLastPlaylistLink() {
+  const summary = getStoredJson(storageKeys.lastRunSummary, null);
+  if (!summary?.playlistId) {
+    lastPlaylistLink.classList.add("hidden");
+    lastPlaylistLink.removeAttribute("href");
+    return;
+  }
+
+  lastPlaylistLink.href = `https://open.spotify.com/playlist/${summary.playlistId}`;
+  lastPlaylistLink.classList.remove("hidden");
+}
+
+function isSetupCollapsed() {
+  return localStorage.getItem(storageKeys.setupCollapsed) === "true";
+}
+
+function setSetupCollapsed(collapsed) {
+  localStorage.setItem(storageKeys.setupCollapsed, collapsed ? "true" : "false");
+}
+
+function applySetupCardState() {
+  const collapsed = isSetupCollapsed() && !setupToggleButton.classList.contains("hidden");
+  setupCard.classList.toggle("is-collapsed", collapsed);
+  setupCardBody.classList.toggle("hidden", collapsed);
+  setupToggleButton.textContent = collapsed ? "Expand" : "Collapse";
+}
+
+function toggleSetupCard() {
+  setSetupCollapsed(!isSetupCollapsed());
+  applySetupCardState();
 }
 
 function getActiveFridayWindow() {

@@ -64,28 +64,41 @@
 
       <section class="layout-grid">
         <section class="stack">
-          <section class="card">
-            <p class="eyebrow">Setup</p>
-            <h2>Spotify connection</h2>
-            <p class="muted section-note">
-              Use your own Spotify app credentials here so the flow runs in your browser session.
-            </p>
-            <div class="field-grid">
-              <label class="field">
-                <span>Spotify Client ID</span>
-                <input id="client-id" type="text" placeholder="Paste your Spotify app client ID" />
-                <small class="field-hint">Each person can use their own Spotify developer app here.</small>
-              </label>
-
-              <label class="field">
-                <span>Redirect URI</span>
-                <input id="redirect-uri" type="text" />
-                <small class="field-hint">This should exactly match a Redirect URI in your Spotify app settings.</small>
-              </label>
+          <section id="setup-card" class="card">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Setup</p>
+                <h2>Spotify connection</h2>
+              </div>
+              <button
+                id="setup-toggle-button"
+                class="button button-ghost button-small hidden"
+                type="button"
+              >
+                Collapse
+              </button>
             </div>
+            <div id="setup-card-body" class="card-body">
+              <p class="muted section-note">
+                Use your own Spotify app credentials here so the flow runs in your browser session.
+              </p>
+              <div class="field-grid">
+                <label class="field">
+                  <span>Spotify Client ID</span>
+                  <input id="client-id" type="text" placeholder="Paste your Spotify app client ID" />
+                  <small class="field-hint">Each person can use their own Spotify developer app here.</small>
+                </label>
 
-            <div class="actions">
-              <button id="disconnect-button" class="button button-ghost">Disconnect</button>
+                <label class="field">
+                  <span>Redirect URI</span>
+                  <input id="redirect-uri" type="text" />
+                  <small class="field-hint">This should exactly match a Redirect URI in your Spotify app settings.</small>
+                </label>
+              </div>
+
+              <div class="actions">
+                <button id="disconnect-button" class="button button-ghost">Disconnect</button>
+              </div>
             </div>
           </section>
 
@@ -138,6 +151,31 @@
           </section>
 
           <section id="results-card" class="card hidden">
+            <div id="run-state-panel" class="run-state-panel hidden">
+              <div class="run-state-copy">
+                <p class="eyebrow">Current Run</p>
+                <strong id="run-mode-label">Full build</strong>
+                <span id="run-progress-label">Waiting to start.</span>
+              </div>
+              <div class="progress-track" aria-hidden="true">
+                <span id="run-progress-fill" class="progress-fill"></span>
+              </div>
+            </div>
+            <div id="settings-strip" class="settings-strip hidden">
+              <span id="settings-mode" class="meta-pill">Mode: Full build</span>
+              <span id="settings-playlist" class="meta-pill">Playlist: Release Radar</span>
+              <span id="settings-filter" class="meta-pill">Genre filter: On</span>
+              <span id="settings-window-pill" class="meta-pill">Window: Sat to Fri</span>
+              <a
+                id="last-playlist-link"
+                class="meta-pill settings-link hidden"
+                href="#"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open last playlist
+              </a>
+            </div>
             <div class="results-header">
               <div>
                 <p class="eyebrow">Release Radar</p>
@@ -202,15 +240,15 @@
             <h2>Rate-limit watch</h2>
             <div class="timeline compact-list">
               <div class="timeline-step compact-step">
-                <span class="timeline-index">RL</span>
+                <span class="timeline-index">Rate</span>
                 <p id="telemetry-last-429">No 429s recorded.</p>
               </div>
               <div class="timeline-step compact-step">
-                <span class="timeline-index">RT</span>
+                <span class="timeline-index">Retry</span>
                 <p id="telemetry-retry-delay">No retry delay active.</p>
               </div>
               <div class="timeline-step compact-step">
-                <span class="timeline-index">BT</span>
+                <span class="timeline-index">Batch</span>
                 <p id="telemetry-batch">No batch started.</p>
               </div>
             </div>
