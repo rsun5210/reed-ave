@@ -6,6 +6,10 @@ on:
     - cron: "0 7 * * 5"
       timezone: "America/Los_Angeles"
 
+concurrency:
+  group: friday-release-radar
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
@@ -15,6 +19,7 @@ jobs:
     timeout-minutes: 90
     env:
       SPOTIFY_RADAR_TIMEZONE: America/Los_Angeles
+      SPOTIFY_RADAR_CACHE_DIR: .release-radar-cache
       SPOTIFY_PLAYLIST_NAME: Weekly Release Radar
       SPOTIFY_MIN_SAVED_TRACKS_PER_ARTIST: "2"
       SPOTIFY_PLAYLIST_ID: ${{ secrets.SPOTIFY_PLAYLIST_ID }}
@@ -24,6 +29,14 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Restore Release Radar cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .release-radar-cache
+          key: release-radar-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            release-radar-${{ runner.os }}-
 
       - name: Ensure runner dependencies
         shell: bash
@@ -65,3 +78,10 @@ jobs:
       - name: Run automatic Friday update
         shell: bash
         run: ./release-radar.sh
+
+      - name: Save Release Radar cache
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: .release-radar-cache
+          key: release-radar-${{ runner.os }}-${{ github.run_id }}

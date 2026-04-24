@@ -44,6 +44,8 @@ Notes:
 - If Spotify ever rotates your refresh token, update the `SPOTIFY_REFRESH_TOKEN` repository secret with the new value from a fresh browser login/export.
 - `SPOTIFY_PLAYLIST_ID` is optional because the runner can still find the playlist by name, but setting it makes updates more direct.
 - The shell runner now computes the Friday window in Python so it works on both macOS and Linux runners.
+- The workflow now restores and saves `.release-radar-cache/` between runs, so future Friday updates can reuse liked-song, genre, album, and release caches instead of starting from zero every week.
+- The workflow uses GitHub Actions `concurrency` protection so two Friday runs do not overlap and race each other.
 
 ## Deploying the browser app on Vercel
 
