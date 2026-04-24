@@ -585,6 +585,7 @@ for (( artist_index=0; artist_index<qualified_count; artist_index++ )); do
   artist_name="$(printf '%s' "$qualified_artists" | "$JQ_BIN" -r ".[$artist_index].artist.name")"
   saved_track_count="$(printf '%s' "$qualified_artists" | "$JQ_BIN" -r ".[$artist_index].saved_track_count")"
   artist_release_cache_file="$(week_release_cache_path "$artist_id")"
+  artist_release_cache_temp_file="$TMP_DIR/artist-${artist_id}.jsonl"
 
   if [[ "$SHOULD_BYPASS_RELEASE_CACHE" -eq 0 && -f "$artist_release_cache_file" ]]; then
     cat "$artist_release_cache_file" >> "$release_candidates_file"
@@ -592,11 +593,11 @@ for (( artist_index=0; artist_index<qualified_count; artist_index++ )); do
   fi
 
   "$SLEEP_BIN" "$ARTIST_REQUEST_DELAY_SECONDS"
-  : > "$artist_release_cache_file"
+  : > "$artist_release_cache_temp_file"
 
   if ! albums_page="$(spotify_get_paginated_items "/artists/$artist_id/albums?include_groups=album,single,appears_on" 50)"; then
     log "Skipping artist after repeated failures or rate limits: $artist_name"
-    rm -f "$artist_release_cache_file"
+    rm -f "$artist_release_cache_temp_file"
     continue
   fi
   recent_albums="$(printf '%s' "$albums_page" | "$JQ_BIN" --arg start "$WINDOW_START" --arg end "$WINDOW_END_EXCLUSIVE" '
@@ -667,8 +668,10 @@ for (( artist_index=0; artist_index<qualified_count; artist_index++ )); do
           + (10 - ((daynum($window_end) - daynum($release_date)) | floor))
           + (if $album_type == "single" then 3 else 1 end))
       }
-    ' | tee -a "$artist_release_cache_file" >> "$release_candidates_file"
+    ' | tee -a "$artist_release_cache_temp_file" >> "$release_candidates_file"
   done
+
+  mv "$artist_release_cache_temp_file" "$artist_release_cache_file"
 done
 
 if [[ ! -s "$release_candidates_file" ]]; then
