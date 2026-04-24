@@ -451,9 +451,9 @@ hydrate_artist_details_cache() {
     return
   fi
 
-  "$JQ_BIN" -r --argfile cache "$GENRE_CACHE_FILE" '
+  "$JQ_BIN" -r --slurpfile cache "$GENRE_CACHE_FILE" '
     .[]
-    | select(($cache[.artist.id] // null) == null)
+    | select((($cache[0] // {})[.artist.id] // null) == null)
     | .artist.id
   ' "$source_file" > "$missing_ids_file"
 
@@ -498,10 +498,10 @@ build_or_load_qualified_artists() {
 
   "$JQ_BIN" -n \
     --slurpfile qualified "$qualified_artists_file" \
-    --argfile cache "$GENRE_CACHE_FILE" \
+    --slurpfile cache "$GENRE_CACHE_FILE" \
     --arg pattern "$EXCLUDED_GENRE_PATTERN" '
     $qualified[0]
-    | map(.artist = ($cache[.artist.id] // .artist))
+    | map(.artist = ((($cache[0] // {})[.artist.id]) // .artist))
     | map(select(((.artist.genres // []) | join(" ") | ascii_downcase) | test($pattern) | not))
   ' /dev/null > "$TMP_DIR/qualified_artists.filtered.json"
 
