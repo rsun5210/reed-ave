@@ -472,14 +472,13 @@ hydrate_artist_details_cache() {
   missing_total="$(wc -l < "$missing_ids_file" | tr -d ' ')"
   log "Fetching Spotify genre details for $missing_total artists..."
 
-  local start_line=1
-  while [[ "$start_line" -le "$missing_total" ]]; do
-    local end_line=$((start_line + 49))
-    local ids
-    ids="$(sed -n "${start_line},${end_line}p" "$missing_ids_file" | paste -sd, -)"
-    spotify_get "/artists?ids=$ids" | "$JQ_BIN" -c '.artists[]' >> "$fetched_details_file"
-    start_line=$((end_line + 1))
-  done
+  while IFS= read -r artist_id; do
+    if [[ -z "$artist_id" ]]; then
+      continue
+    fi
+    spotify_get "/artists/$artist_id" | "$JQ_BIN" -c '.' >> "$fetched_details_file"
+    "$SLEEP_BIN" 1
+  done < "$missing_ids_file"
 
   "$JQ_BIN" -s '
     (.[0] // {}) as $existing
@@ -748,7 +747,7 @@ write_playlist_id "$playlist_id"
 
 first_batch="$("$JQ_BIN" '.[0:100] | map(.track_uri)' "$selected_tracks_file")"
 log "Writing tracks to Spotify playlist..."
-spotify_put_json "/playlists/$playlist_id/tracks" "$("$JQ_BIN" -n --argjson uris "$first_batch" '{uris: $uris}')"
+spotify_put_json "/playlists/$playlist_id/items" "$("$JQ_BIN" -n --argjson uris "$first_batch" '{uris: $uris}')"
 
 remaining_batches="$("$JQ_BIN" '[range(100; length; 100)]' "$selected_tracks_file")"
 remaining_batch_count="$(printf '%s' "$remaining_batches" | "$JQ_BIN" 'length')"
@@ -756,7 +755,7 @@ remaining_batch_count="$(printf '%s' "$remaining_batches" | "$JQ_BIN" 'length')"
 for (( batch_index=0; batch_index<remaining_batch_count; batch_index++ )); do
   start_index="$(printf '%s' "$remaining_batches" | "$JQ_BIN" -r ".[$batch_index]")"
   batch="$("$JQ_BIN" ".[$start_index:$start_index+100] | map(.track_uri)" "$selected_tracks_file")"
-  spotify_post_json "/playlists/$playlist_id/tracks" "$("$JQ_BIN" -n --argjson uris "$batch" '{uris: $uris}')" >/dev/null
+  spotify_post_json "/playlists/$playlist_id/items" "$("$JQ_BIN" -n --argjson uris "$batch" '{uris: $uris}')" >/dev/null
 done
 
 echo "Updated playlist: $PLAYLIST_NAME"
