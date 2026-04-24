@@ -25,7 +25,7 @@ RADAR_TIMEZONE="${SPOTIFY_RADAR_TIMEZONE:-America/Los_Angeles}"
 STATE_FILE="$CACHE_DIR/state.json"
 LIBRARY_CACHE_FILE="$CACHE_DIR/library.jsonl"
 GENRE_CACHE_FILE="$CACHE_DIR/artist_genres.json"
-RELEASE_CACHE_DIR="$CACHE_DIR/release_windows_v3"
+RELEASE_CACHE_DIR="$CACHE_DIR/release_windows_v4"
 ALBUM_TRACK_CACHE_DIR="$CACHE_DIR/album_tracks_v2"
 
 if [[ -z "$PYTHON_BIN" ]]; then

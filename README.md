@@ -46,6 +46,7 @@ Notes:
 - The shell runner now computes the Friday window in Python so it works on both macOS and Linux runners.
 - The workflow now restores and saves `.release-radar-cache/` between runs, so future Friday updates can reuse liked-song, genre, album, and release caches instead of starting from zero every week.
 - The workflow uses GitHub Actions `concurrency` protection so two Friday runs do not overlap and race each other.
+- After each GitHub Actions run, the workflow summary prints the playlist name and discovered playlist ID when available. Once you have that ID, save it as `SPOTIFY_PLAYLIST_ID` so future runs stay pinned to one playlist.
 
 ## Deploying the browser app on Vercel
 

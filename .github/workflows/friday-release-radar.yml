@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
+      RELEASE_RADAR_CACHE_VERSION: v2
       SPOTIFY_RADAR_TIMEZONE: America/Los_Angeles
       SPOTIFY_RADAR_CACHE_DIR: .release-radar-cache
       SPOTIFY_PLAYLIST_NAME: Weekly Release Radar
@@ -34,9 +35,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .release-radar-cache
-          key: release-radar-${{ runner.os }}-${{ github.run_id }}
+          key: release-radar-${{ runner.os }}-${{ env.RELEASE_RADAR_CACHE_VERSION }}-${{ github.run_id }}
           restore-keys: |
-            release-radar-${{ runner.os }}-
+            release-radar-${{ runner.os }}-${{ env.RELEASE_RADAR_CACHE_VERSION }}-
 
       - name: Ensure runner dependencies
         shell: bash
@@ -79,9 +80,27 @@ jobs:
         shell: bash
         run: ./release-radar.sh
 
+      - name: Summarize playlist details
+        if: always()
+        shell: bash
+        run: |
+          if [ -f .release-radar.json ]; then
+            playlist_id="$(jq -r '.playlist_id // empty' .release-radar.json)"
+            playlist_name="$(jq -r '.playlist_name // empty' .release-radar.json)"
+            if [ -n "$playlist_name" ]; then
+              echo "## Release Radar run" >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "- Playlist name: $playlist_name" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            if [ -n "$playlist_id" ]; then
+              echo "- Playlist ID: \`$playlist_id\`" >> "$GITHUB_STEP_SUMMARY"
+              echo "- Recommended next step: save this as the \`SPOTIFY_PLAYLIST_ID\` repository secret so future runs always target the same playlist." >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+
       - name: Save Release Radar cache
         if: always()
         uses: actions/cache/save@v4
         with:
           path: .release-radar-cache
-          key: release-radar-${{ runner.os }}-${{ github.run_id }}
+          key: release-radar-${{ runner.os }}-${{ env.RELEASE_RADAR_CACHE_VERSION }}-${{ github.run_id }}
