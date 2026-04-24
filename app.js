@@ -231,7 +231,7 @@ async function exchangeCodeForToken(code) {
   const data = await safeParseJson(response);
 
   if (!response.ok) {
-    setStatus(data?.error_description || "Spotify token exchange failed.");
+    setStatus(getSpotifyErrorMessage(data, "Spotify token exchange failed."));
     return;
   }
 
@@ -262,6 +262,10 @@ async function refreshAccessToken() {
   const data = await safeParseJson(response);
 
   if (!response.ok || !data?.access_token) {
+    if (data?.error === "invalid_grant") {
+      disconnect(false);
+      setStatus("Spotify session expired or was revoked. Reconnect Spotify to keep going.");
+    }
     return null;
   }
 
@@ -1180,14 +1184,20 @@ async function spotifyRequest(path, init, accessToken) {
   let activeToken = accessToken;
 
   while (attempt < maxSpotifyRetries) {
-    const response = await fetch(`https://api.spotify.com/v1${path}`, {
-      ...init,
-      headers: {
-        Authorization: `Bearer ${activeToken}`,
-        "Content-Type": "application/json",
-        ...(init.headers ?? {}),
-      },
-    });
+    let response;
+
+    try {
+      response = await fetch(`https://api.spotify.com/v1${path}`, {
+        ...init,
+        headers: {
+          Authorization: `Bearer ${activeToken}`,
+          "Content-Type": "application/json",
+          ...(init.headers ?? {}),
+        },
+      });
+    } catch (error) {
+      throw new Error("Network error talking to Spotify. Check your connection and try again.");
+    }
 
     if (response.status === 204) {
       return null;
@@ -1213,7 +1223,7 @@ async function spotifyRequest(path, init, accessToken) {
     const data = await safeParseJson(response);
 
     if (!response.ok) {
-      throw new Error(data?.error?.message || "Spotify API request failed.");
+      throw new Error(getSpotifyErrorMessage(data, `Spotify API request failed (${response.status}).`));
     }
 
     return data;
@@ -1547,6 +1557,19 @@ async function safeParseJson(response) {
   } catch (error) {
     return null;
   }
+}
+
+function getSpotifyErrorMessage(data, fallback) {
+  if (!data || typeof data !== "object") {
+    return fallback;
+  }
+
+  return (
+    data?.error?.message ||
+    data?.error_description ||
+    (typeof data?.error === "string" ? data.error : null) ||
+    fallback
+  );
 }
 
 function getDayDifference(laterDateString, earlierDateString) {
