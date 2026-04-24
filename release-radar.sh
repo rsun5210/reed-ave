@@ -7,6 +7,7 @@ export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:$PATH"
 CURL_BIN="/usr/bin/curl"
 JQ_BIN="/usr/bin/jq"
 DATE_BIN="/bin/date"
+PYTHON_BIN="$(command -v python3 || true)"
 CAT_BIN="/bin/cat"
 AWK_BIN="/usr/bin/awk"
 TAIL_BIN="/usr/bin/tail"
@@ -19,11 +20,17 @@ ARTIST_REQUEST_DELAY_SECONDS=1
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG_FILE="${SPOTIFY_RADAR_CONFIG:-$ROOT_DIR/.release-radar.json}"
 CACHE_DIR="${SPOTIFY_RADAR_CACHE_DIR:-$ROOT_DIR/.release-radar-cache}"
+RADAR_TIMEZONE="${SPOTIFY_RADAR_TIMEZONE:-America/Los_Angeles}"
 STATE_FILE="$CACHE_DIR/state.json"
 LIBRARY_CACHE_FILE="$CACHE_DIR/library.jsonl"
 GENRE_CACHE_FILE="$CACHE_DIR/artist_genres.json"
 RELEASE_CACHE_DIR="$CACHE_DIR/release_windows_v3"
 ALBUM_TRACK_CACHE_DIR="$CACHE_DIR/album_tracks_v2"
+
+if [[ -z "$PYTHON_BIN" ]]; then
+  echo "Missing dependency: python3" >&2
+  exit 1
+fi
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
   echo "Missing config file: $CONFIG_FILE" >&2
@@ -511,9 +518,29 @@ week_release_cache_path() {
   printf '%s/%s-%s.jsonl' "$RELEASE_CACHE_DIR" "$WINDOW_START" "$artist_id"
 }
 
-WINDOW_INCLUSIVE_END="$("$DATE_BIN" -vfri +%F)"
-WINDOW_START="$("$DATE_BIN" -j -v-6d -f %F "$WINDOW_INCLUSIVE_END" +%F)"
-WINDOW_END_EXCLUSIVE="$("$DATE_BIN" -j -v+1d -f %F "$WINDOW_INCLUSIVE_END" +%F)"
+compute_release_window() {
+  "$PYTHON_BIN" - "$RADAR_TIMEZONE" <<'PY'
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+import sys
+
+tz = ZoneInfo(sys.argv[1])
+today = datetime.now(tz).date()
+days_until_friday = (4 - today.weekday()) % 7
+window_end = today + timedelta(days=days_until_friday)
+window_start = window_end - timedelta(days=6)
+window_end_exclusive = window_end + timedelta(days=1)
+
+print(window_start.isoformat())
+print(window_end.isoformat())
+print(window_end_exclusive.isoformat())
+PY
+}
+
+window_parts=("${(@f)$(compute_release_window)}")
+WINDOW_START="${window_parts[1]}"
+WINDOW_INCLUSIVE_END="${window_parts[2]}"
+WINDOW_END_EXCLUSIVE="${window_parts[3]}"
 
 log "Scanning liked songs for artists with $MIN_SAVED_TRACKS+ saved tracks..."
 sync_library_cache

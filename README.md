@@ -18,6 +18,33 @@ That serves the app at `http://localhost:8000/index.html` by default.
 
 After a successful run, the script can persist the chosen Spotify `playlist_id` into `.release-radar.json` so future runs can update that exact playlist directly.
 
+## GitHub Actions backend cron
+
+If you want true unattended Friday updates without opening the browser, this repo now includes a GitHub Actions workflow at `.github/workflows/friday-release-radar.yml`.
+
+It runs every Friday at `7:00 AM` in the `America/Los_Angeles` timezone and can also be run manually from the GitHub `Actions` tab.
+
+Set these repository secrets in GitHub:
+
+- `SPOTIFY_CLIENT_ID`
+- `SPOTIFY_REFRESH_TOKEN`
+- `SPOTIFY_PLAYLIST_ID` (optional, but helpful once you know the playlist ID)
+
+To add them in GitHub:
+
+1. Open your repository on GitHub.
+2. Go to `Settings` -> `Secrets and variables` -> `Actions`.
+3. Create the secrets above under `Repository secrets`.
+
+The workflow writes a temporary `.release-radar.json` on the runner, runs `./release-radar.sh`, and then discards that machine when the job finishes.
+
+Notes:
+
+- The scheduled GitHub Actions run uses your stored Spotify refresh token, so you do not need to open the Vercel page each week.
+- If Spotify ever rotates your refresh token, update the `SPOTIFY_REFRESH_TOKEN` repository secret with the new value from a fresh browser login/export.
+- `SPOTIFY_PLAYLIST_ID` is optional because the runner can still find the playlist by name, but setting it makes updates more direct.
+- The shell runner now computes the Friday window in Python so it works on both macOS and Linux runners.
+
 ## Deploying the browser app on Vercel
 
 The browser UI in this repo is a static site, so it can be deployed directly to Vercel without a build step.

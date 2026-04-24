@@ -1,0 +1,67 @@
+name: Friday Release Radar
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 7 * * 5"
+      timezone: "America/Los_Angeles"
+
+permissions:
+  contents: read
+
+jobs:
+  update-playlist:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      SPOTIFY_RADAR_TIMEZONE: America/Los_Angeles
+      SPOTIFY_PLAYLIST_NAME: Weekly Release Radar
+      SPOTIFY_MIN_SAVED_TRACKS_PER_ARTIST: "2"
+      SPOTIFY_PLAYLIST_ID: ${{ secrets.SPOTIFY_PLAYLIST_ID }}
+      SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
+      SPOTIFY_REFRESH_TOKEN: ${{ secrets.SPOTIFY_REFRESH_TOKEN }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Ensure runner dependencies
+        shell: bash
+        run: |
+          missing_packages=()
+          command -v jq >/dev/null 2>&1 || missing_packages+=("jq")
+          command -v zsh >/dev/null 2>&1 || missing_packages+=("zsh")
+          if [ "${#missing_packages[@]}" -gt 0 ]; then
+            sudo apt-get update
+            sudo apt-get install -y "${missing_packages[@]}"
+          fi
+
+      - name: Validate Spotify secrets
+        shell: bash
+        run: |
+          if [ -z "$SPOTIFY_CLIENT_ID" ] || [ -z "$SPOTIFY_REFRESH_TOKEN" ]; then
+            echo "Missing required GitHub Actions secrets: SPOTIFY_CLIENT_ID and/or SPOTIFY_REFRESH_TOKEN" >&2
+            exit 1
+          fi
+
+      - name: Write runtime config
+        shell: bash
+        run: |
+          jq -n \
+            --arg client_id "$SPOTIFY_CLIENT_ID" \
+            --arg refresh_token "$SPOTIFY_REFRESH_TOKEN" \
+            --arg playlist_id "$SPOTIFY_PLAYLIST_ID" \
+            --arg playlist_name "$SPOTIFY_PLAYLIST_NAME" \
+            --argjson minimum_saved_tracks_per_artist "$SPOTIFY_MIN_SAVED_TRACKS_PER_ARTIST" \
+            '{
+              client_id: $client_id,
+              refresh_token: $refresh_token,
+              playlist_id: $playlist_id,
+              playlist_name: $playlist_name,
+              minimum_saved_tracks_per_artist: $minimum_saved_tracks_per_artist,
+              release_day: "FRIDAY"
+            }' > .release-radar.json
+
+      - name: Run automatic Friday update
+        shell: bash
+        run: ./release-radar.sh
