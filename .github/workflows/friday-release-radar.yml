@@ -78,7 +78,9 @@ jobs:
 
       - name: Run automatic Friday update
         shell: bash
-        run: ./release-radar.sh
+        run: |
+          set -o pipefail
+          ./release-radar.sh 2>&1 | tee release-radar-run.log
 
       - name: Summarize playlist details
         if: always()
@@ -97,6 +99,31 @@ jobs:
               echo "- Recommended next step: save this as the \`SPOTIFY_PLAYLIST_ID\` repository secret so future runs always target the same playlist." >> "$GITHUB_STEP_SUMMARY"
             fi
           fi
+          if [ -f release-radar-run.log ]; then
+            window="$(grep '^Window:' release-radar-run.log | tail -n 1 | sed 's/^Window: //')"
+            tracks_added="$(grep '^Tracks added:' release-radar-run.log | tail -n 1 | sed 's/^Tracks added: //')"
+            playlist_url="$(grep '^Open:' release-radar-run.log | tail -n 1 | sed 's/^Open: //')"
+            if [ -n "$window" ] || [ -n "$tracks_added" ] || [ -n "$playlist_url" ]; then
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            if [ -n "$window" ]; then
+              echo "- Window: $window" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            if [ -n "$tracks_added" ]; then
+              echo "- Tracks added: $tracks_added" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            if [ -n "$playlist_url" ]; then
+              echo "- Playlist URL: $playlist_url" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+
+      - name: Upload run log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-radar-run-log
+          path: release-radar-run.log
+          if-no-files-found: ignore
 
       - name: Save Release Radar cache
         if: always()
