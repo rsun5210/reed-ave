@@ -542,10 +542,26 @@ print(window_end_exclusive.isoformat())
 PY
 }
 
+current_local_date() {
+  "$PYTHON_BIN" - "$RADAR_TIMEZONE" <<'PY'
+from datetime import datetime
+from zoneinfo import ZoneInfo
+import sys
+
+print(datetime.now(ZoneInfo(sys.argv[1])).date().isoformat())
+PY
+}
+
 window_parts=("${(@f)$(compute_release_window)}")
 WINDOW_START="${window_parts[1]}"
 WINDOW_INCLUSIVE_END="${window_parts[2]}"
 WINDOW_END_EXCLUSIVE="${window_parts[3]}"
+CURRENT_LOCAL_DATE="$(current_local_date)"
+SHOULD_BYPASS_RELEASE_CACHE=0
+
+if [[ "$CURRENT_LOCAL_DATE" == "$WINDOW_INCLUSIVE_END" ]]; then
+  SHOULD_BYPASS_RELEASE_CACHE=1
+fi
 
 log "Scanning liked songs for artists with $MIN_SAVED_TRACKS+ saved tracks..."
 sync_library_cache
@@ -570,7 +586,7 @@ for (( artist_index=0; artist_index<qualified_count; artist_index++ )); do
   saved_track_count="$(printf '%s' "$qualified_artists" | "$JQ_BIN" -r ".[$artist_index].saved_track_count")"
   artist_release_cache_file="$(week_release_cache_path "$artist_id")"
 
-  if [[ -f "$artist_release_cache_file" ]]; then
+  if [[ "$SHOULD_BYPASS_RELEASE_CACHE" -eq 0 && -f "$artist_release_cache_file" ]]; then
     cat "$artist_release_cache_file" >> "$release_candidates_file"
     continue
   fi
