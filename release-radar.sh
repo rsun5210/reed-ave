@@ -8,6 +8,7 @@ CURL_BIN="/usr/bin/curl"
 JQ_BIN="/usr/bin/jq"
 DATE_BIN="/bin/date"
 PYTHON_BIN="$(command -v python3 || true)"
+MKTEMP_BIN="$(command -v mktemp || true)"
 CAT_BIN="/bin/cat"
 AWK_BIN="/usr/bin/awk"
 TAIL_BIN="/usr/bin/tail"
@@ -32,6 +33,11 @@ if [[ -z "$PYTHON_BIN" ]]; then
   exit 1
 fi
 
+if [[ -z "$MKTEMP_BIN" ]]; then
+  echo "Missing dependency: mktemp" >&2
+  exit 1
+fi
+
 if [[ ! -f "$CONFIG_FILE" ]]; then
   echo "Missing config file: $CONFIG_FILE" >&2
   echo "Copy .release-radar.example.json to .release-radar.json and fill in your Spotify credentials." >&2
@@ -49,7 +55,7 @@ if [[ -z "$CLIENT_ID" || "$CLIENT_ID" == "null" || -z "$REFRESH_TOKEN" || "$REFR
   exit 1
 fi
 
-TMP_DIR="$(mktemp -d)"
+TMP_DIR="$("$MKTEMP_BIN" -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 mkdir -p "$CACHE_DIR" "$RELEASE_CACHE_DIR" "$ALBUM_TRACK_CACHE_DIR"
 
@@ -253,7 +259,7 @@ spotify_get_paginated_items() {
     separator='&'
   fi
 
-  page_file="$(mktemp "$TMP_DIR/paginated.XXXXXX.jsonl")"
+  page_file="$("$MKTEMP_BIN" "$TMP_DIR/paginated.XXXXXX.jsonl")"
   : > "$page_file"
 
   while :; do
