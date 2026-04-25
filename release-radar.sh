@@ -16,6 +16,7 @@ SLEEP_BIN="/bin/sleep"
 EXCLUDED_GENRE_PATTERN='rap|hip hop|hip-hop|trap|drill|grime'
 FULL_RESCAN_INTERVAL_DAYS=14
 MAX_RATE_LIMIT_RETRIES=8
+MAX_RETRY_AFTER_SECONDS=300
 ARTIST_REQUEST_DELAY_SECONDS=1
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -128,8 +129,15 @@ spotify_request() {
       if [[ -z "$retry_after" ]]; then
         retry_after="$backoff_seconds"
       fi
+      if ! [[ "$retry_after" =~ ^[0-9]+$ ]]; then
+        retry_after="$backoff_seconds"
+      fi
       if [[ "$retry_after" -lt "$backoff_seconds" ]]; then
         retry_after="$backoff_seconds"
+      fi
+      if [[ "$retry_after" -gt "$MAX_RETRY_AFTER_SECONDS" ]]; then
+        log "Spotify rate limit hit for $method $url with excessive Retry-After ${retry_after}s. Capping to ${MAX_RETRY_AFTER_SECONDS}s for automation safety."
+        retry_after="$MAX_RETRY_AFTER_SECONDS"
       fi
       log "Spotify rate limit hit for $method $url. Waiting ${retry_after}s before retrying (attempt $retry_count/$MAX_RATE_LIMIT_RETRIES)..."
       if [[ "$retry_count" -ge "$MAX_RATE_LIMIT_RETRIES" ]]; then
