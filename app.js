@@ -1,4 +1,5 @@
 const storageKeys = {
+  appStorageVersion: "spotify_app_storage_version",
   accessToken: "spotify_access_token",
   refreshToken: "spotify_refresh_token",
   expiresAt: "spotify_expires_at",
@@ -19,6 +20,8 @@ const storageKeys = {
   rateTelemetry: "spotify_rate_telemetry_v1",
   runLog: "spotify_run_log_v1",
 };
+
+const appStorageVersion = "2026-04-24-cache-reset-1";
 
 const scopes = [
   "user-read-email",
@@ -114,6 +117,7 @@ playlistNameInput.addEventListener("input", updateSettingsSummary);
 setupToggleButton.addEventListener("click", toggleSetupCard);
 
 async function bootstrap() {
+  ensureCurrentStorageVersion();
   updateWindowStat(getActiveFridayWindow());
   updateLastRunStat();
   updateCacheFootprintStat();
@@ -1151,6 +1155,41 @@ function clearCaches() {
   addRunLogEntry("Cleared local caches and checkpoint state.");
   renderRunLog();
   setStatus("Local caches cleared.");
+}
+
+function ensureCurrentStorageVersion() {
+  const storedVersion = localStorage.getItem(storageKeys.appStorageVersion);
+  if (storedVersion === appStorageVersion) {
+    return;
+  }
+
+  clearLegacyAppState();
+  localStorage.setItem(storageKeys.appStorageVersion, appStorageVersion);
+}
+
+function clearLegacyAppState() {
+  for (const key of [
+    storageKeys.accessToken,
+    storageKeys.refreshToken,
+    storageKeys.expiresAt,
+    storageKeys.codeVerifier,
+    storageKeys.genreFilterEnabled,
+    storageKeys.setupCollapsed,
+    storageKeys.playlistId,
+    storageKeys.libraryCache,
+    storageKeys.libraryLatestAddedAt,
+    storageKeys.libraryLastFullScanAt,
+    storageKeys.qualifiedArtistsCache,
+    storageKeys.artistDetailsCache,
+    storageKeys.releaseCache,
+    storageKeys.albumTrackCache,
+    storageKeys.lastRunSummary,
+    storageKeys.batchCheckpoint,
+    storageKeys.rateTelemetry,
+    storageKeys.runLog,
+  ]) {
+    localStorage.removeItem(key);
+  }
 }
 
 async function spotifyGet(path, accessToken) {
