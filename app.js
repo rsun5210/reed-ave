@@ -42,14 +42,15 @@ const excludedGenreKeywords = [
 
 const cacheRetentionDays = 14;
 const maxSpotifyRetries = 8;
-const spotifyRequestSpacingMilliseconds = 500;
-const spotifyRequestSpacingOn429Milliseconds = 1500;
-const releaseBatchSize = 10;
-const batchPauseMilliseconds = 2500;
+const spotifyRequestSpacingMilliseconds = 1000;
+const spotifyRequestSpacingOn429Milliseconds = 5000;
+const releaseBatchSize = 5;
+const batchPauseMilliseconds = 5000;
 const maxRunLogEntries = 12;
 const artistDetailsBatchSize = 10;
-const artistDetailsPauseMilliseconds = 1000;
-const artistReleaseSpacingMilliseconds = 400;
+const artistDetailsPauseMilliseconds = 1500;
+const artistReleaseSpacingMilliseconds = 1200;
+const albumReleaseSpacingMilliseconds = 900;
 
 const clientIdInput = document.querySelector("#client-id");
 const redirectUriInput = document.querySelector("#redirect-uri");
@@ -817,6 +818,10 @@ async function fetchReleaseCandidates(weightedArtists, accessToken, releaseWindo
 
           artistCandidates.push(candidate);
           candidates.push(candidate);
+        }
+
+        if (album !== releases[releases.length - 1]) {
+          await wait(albumReleaseSpacingMilliseconds);
         }
       }
 
