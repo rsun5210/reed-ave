@@ -160,63 +160,68 @@ playlistNameInput.addEventListener("input", updateSettingsSummary);
 setupToggleButton.addEventListener("click", toggleSetupCard);
 
 async function bootstrap() {
-  ensureCurrentStorageVersion();
-  updateWindowStat(getActiveFridayWindow());
-  updateLastRunStat();
-  updateCacheFootprintStat();
-  updateCheckpointStatus();
-  updateRateTelemetry();
-  renderRunLog();
-  setRunControlsDisabled(false);
-  redirectUriInput.value = `${window.location.origin}${window.location.pathname}`;
-  clientIdInput.value = localStorage.getItem(storageKeys.clientId) ?? "";
-  genreFilterEnabledInput.checked = isGenreFilterEnabled();
-  safeModeEnabledInput.checked = isSafeModeEnabled();
-  updateSettingsSummary();
-  updateLastPlaylistLink();
-  applySetupCardState();
+  try {
+    ensureCurrentStorageVersion();
+    updateWindowStat(getActiveFridayWindow());
+    updateLastRunStat();
+    updateCacheFootprintStat();
+    updateCheckpointStatus();
+    updateRateTelemetry();
+    renderRunLog();
+    setRunControlsDisabled(false);
+    redirectUriInput.value = `${window.location.origin}${window.location.pathname}`;
+    clientIdInput.value = localStorage.getItem(storageKeys.clientId) ?? "";
+    genreFilterEnabledInput.checked = isGenreFilterEnabled();
+    safeModeEnabledInput.checked = isSafeModeEnabled();
+    updateSettingsSummary();
+    updateLastPlaylistLink();
+    applySetupCardState();
 
-  const params = new URLSearchParams(window.location.search);
-  const authCode = params.get("code");
-  const authError = params.get("error");
+    const params = new URLSearchParams(window.location.search);
+    const authCode = params.get("code");
+    const authError = params.get("error");
 
-  if (authError) {
-    setStatus(`Spotify sign-in failed: ${authError}`);
-    window.history.replaceState({}, document.title, redirectUriInput.value);
-    return;
-  }
-
-  if (authCode) {
-    setStatus("Completing Spotify sign-in...");
-    await exchangeCodeForToken(authCode);
-    window.history.replaceState({}, document.title, redirectUriInput.value);
-    return;
-  }
-
-  const storedToken = localStorage.getItem(storageKeys.accessToken);
-  const expiresAt = Number(localStorage.getItem(storageKeys.expiresAt) ?? 0);
-
-  if (storedToken && Date.now() < expiresAt) {
-    const activeToken = await getValidAccessToken();
-    if (activeToken) {
-      await loadProfile(activeToken);
-    }
-    return;
-  }
-
-  if (storedToken && Date.now() >= expiresAt) {
-    const refreshedToken = await refreshAccessToken();
-    if (refreshedToken) {
-      await loadProfile(refreshedToken);
+    if (authError) {
+      setStatus(`Spotify sign-in failed: ${authError}`);
+      window.history.replaceState({}, document.title, redirectUriInput.value);
       return;
     }
 
-    setStatus("Session expired. Please reconnect Spotify.");
-    disconnect(false);
-    return;
-  }
+    if (authCode) {
+      setStatus("Completing Spotify sign-in...");
+      await exchangeCodeForToken(authCode);
+      window.history.replaceState({}, document.title, redirectUriInput.value);
+      return;
+    }
 
-  setStatus("Not connected.");
+    const storedToken = localStorage.getItem(storageKeys.accessToken);
+    const expiresAt = Number(localStorage.getItem(storageKeys.expiresAt) ?? 0);
+
+    if (storedToken && Date.now() < expiresAt) {
+      const activeToken = await getValidAccessToken();
+      if (activeToken) {
+        await loadProfile(activeToken);
+      }
+      return;
+    }
+
+    if (storedToken && Date.now() >= expiresAt) {
+      const refreshedToken = await refreshAccessToken();
+      if (refreshedToken) {
+        await loadProfile(refreshedToken);
+        return;
+      }
+
+      setStatus("Session expired. Please reconnect Spotify.");
+      disconnect(false);
+      return;
+    }
+
+    setStatus("Not connected.");
+  } catch (error) {
+    console.error(error);
+    setStatus(error.message || "Could not finish loading Spotify state.");
+  }
 }
 
 async function beginLogin() {
@@ -262,23 +267,30 @@ async function exchangeCodeForToken(code) {
     return;
   }
 
-  const response = await fetchWithNetworkRetries(
-    "https://accounts.spotify.com/api/token",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+  let response;
+
+  try {
+    response = await fetchWithNetworkRetries(
+      "https://accounts.spotify.com/api/token",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          client_id: clientId,
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: redirectUri,
+          code_verifier: verifier,
+        }),
       },
-      body: new URLSearchParams({
-        client_id: clientId,
-        grant_type: "authorization_code",
-        code,
-        redirect_uri: redirectUri,
-        code_verifier: verifier,
-      }),
-    },
-    "Spotify sign-in"
-  );
+      "Spotify sign-in"
+    );
+  } catch (error) {
+    setStatus(error.message || "Spotify sign-in could not be completed.");
+    return;
+  }
 
   const data = await safeParseJson(response);
 
@@ -299,21 +311,28 @@ async function refreshAccessToken() {
     return null;
   }
 
-  const response = await fetchWithNetworkRetries(
-    "https://accounts.spotify.com/api/token",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+  let response;
+
+  try {
+    response = await fetchWithNetworkRetries(
+      "https://accounts.spotify.com/api/token",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          client_id: clientId,
+          grant_type: "refresh_token",
+          refresh_token: refreshToken,
+        }),
       },
-      body: new URLSearchParams({
-        client_id: clientId,
-        grant_type: "refresh_token",
-        refresh_token: refreshToken,
-      }),
-    },
-    "Spotify session refresh"
-  );
+      "Spotify session refresh"
+    );
+  } catch (error) {
+    setStatus(error.message || "Spotify session refresh failed.");
+    return null;
+  }
 
   const data = await safeParseJson(response);
 
@@ -336,15 +355,22 @@ async function refreshAccessToken() {
 async function loadProfile(accessToken) {
   setStatus("Connected. Loading your Spotify profile...");
 
-  const response = await fetchWithNetworkRetries(
-    "https://api.spotify.com/v1/me",
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
+  let response;
+
+  try {
+    response = await fetchWithNetworkRetries(
+      "https://api.spotify.com/v1/me",
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
       },
-    },
-    "Spotify profile load"
-  );
+      "Spotify profile load"
+    );
+  } catch (error) {
+    setStatus(error.message || "Could not load Spotify profile.");
+    return;
+  }
 
   const profile = await safeParseJson(response);
 
