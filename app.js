@@ -14,7 +14,7 @@ const storageKeys = {
   libraryLastFullScanAt: "spotify_library_last_full_scan_at",
   qualifiedArtistsCache: "spotify_qualified_artists_cache_v1",
   artistDetailsCache: "spotify_artist_details_cache_v1",
-  releaseCache: "spotify_release_cache_v3",
+  releaseCache: "spotify_release_cache_v4",
   albumTrackCache: "spotify_album_track_cache_v1",
   lastRunSummary: "spotify_last_run_summary_v1",
   batchCheckpoint: "spotify_batch_checkpoint_v1",
@@ -914,32 +914,14 @@ async function fetchReleaseCandidates(weightedArtists, accessToken, releaseWindo
       }
 
       const artistCandidates = [];
-      let albumsResponse;
+      let releases;
 
       try {
-        albumsResponse = await spotifyGet(
-          `/artists/${artistId}/albums?include_groups=album,single,appears_on&limit=50`,
-          accessToken
-        );
+        releases = await getArtistWindowReleases(artistId, accessToken, releaseWindow);
       } catch (error) {
         console.warn(`Skipping artist ${entry.artist.name}`, error);
         continue;
       }
-
-      const seenAlbumIds = new Set();
-      const releases = (albumsResponse.items ?? []).filter((album) => {
-        if (!album?.id || seenAlbumIds.has(album.id)) {
-          return false;
-        }
-
-        seenAlbumIds.add(album.id);
-
-        if (album.release_date_precision !== "day") {
-          return false;
-        }
-
-        return isWithinWindow(album.release_date, releaseWindow);
-      });
 
       for (const album of releases) {
         let tracks;
@@ -958,7 +940,9 @@ async function fetchReleaseCandidates(weightedArtists, accessToken, releaseWindo
             relevantTracks,
             album,
             artistId,
-            accessToken
+            accessToken,
+            runTuning,
+            releaseWindow
           );
         }
 
@@ -1047,7 +1031,14 @@ function isAlbumLevelMatch(album, artistId) {
   return (album.artists ?? []).some((artist) => artist.id === artistId);
 }
 
-async function filterTracksByExcludedGenres(tracks, album, matchedArtistId, accessToken) {
+async function filterTracksByExcludedGenres(
+  tracks,
+  album,
+  matchedArtistId,
+  accessToken,
+  runTuning,
+  releaseWindow
+) {
   if (!tracks.length) {
     return tracks;
   }
@@ -1072,7 +1063,12 @@ async function filterTracksByExcludedGenres(tracks, album, matchedArtistId, acce
     return tracks;
   }
 
-  const contributorDetails = await hydrateArtistDetails([...contributorArtistIds], accessToken);
+  const contributorDetails = await hydrateArtistDetails(
+    [...contributorArtistIds],
+    accessToken,
+    runTuning,
+    releaseWindow
+  );
 
   return tracks.filter((track) => {
     const contributors = [...(album.artists ?? []), ...(track.artists ?? [])];
@@ -1085,6 +1081,60 @@ async function filterTracksByExcludedGenres(tracks, album, matchedArtistId, acce
       return isExcludedArtist(contributorDetails.get(artist.id) || artist);
     });
   });
+}
+
+async function getArtistWindowReleases(artistId, accessToken, releaseWindow) {
+  const releases = [];
+  const seenAlbumIds = new Set();
+  let offset = 0;
+
+  while (true) {
+    const page = await spotifyGet(
+      `/artists/${artistId}/albums?include_groups=album,single,appears_on&limit=50&offset=${offset}`,
+      accessToken
+    );
+    const items = page.items ?? [];
+
+    if (!items.length) {
+      break;
+    }
+
+    let sawWindowRelease = false;
+
+    for (const album of items) {
+      if (!album?.id || seenAlbumIds.has(album.id)) {
+        continue;
+      }
+
+      seenAlbumIds.add(album.id);
+
+      if (album.release_date_precision !== "day") {
+        continue;
+      }
+
+      if (isWithinWindow(album.release_date, releaseWindow)) {
+        sawWindowRelease = true;
+        releases.push(album);
+      }
+    }
+
+    if (items.length < 50) {
+      break;
+    }
+
+    offset += items.length;
+
+    // Artist release feeds are newest-first, so once a page is entirely older
+    // than the active window we can stop instead of crawling the full catalog.
+    if (!sawWindowRelease) {
+      const lastReleaseDate = items[items.length - 1]?.release_date;
+      if (lastReleaseDate && lastReleaseDate < releaseWindow.start) {
+        break;
+      }
+    }
+  }
+
+  return releases;
 }
 
 function scoreRelease(track, album, savedTrackCount, releaseWindow) {
@@ -1398,6 +1448,7 @@ async function spotifyPut(path, body, accessToken) {
 async function spotifyRequest(path, init, accessToken) {
   let attempt = 0;
   let activeToken = accessToken;
+  let hasRefreshedToken = false;
 
   while (attempt < maxSpotifyRetries) {
     let response;
@@ -1420,10 +1471,11 @@ async function spotifyRequest(path, init, accessToken) {
       return null;
     }
 
-    if (response.status === 401 && attempt === 0) {
+    if (response.status === 401 && !hasRefreshedToken) {
       const refreshedToken = await refreshAccessToken();
       if (refreshedToken) {
         activeToken = refreshedToken;
+        hasRefreshedToken = true;
         attempt += 1;
         continue;
       }
