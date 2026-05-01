@@ -42,12 +42,14 @@ const excludedGenreKeywords = [
 
 const cacheRetentionDays = 14;
 const maxSpotifyRetries = 8;
-const spotifyRequestSpacingMilliseconds = 350;
-const releaseBatchSize = 25;
-const batchPauseMilliseconds = 1500;
+const spotifyRequestSpacingMilliseconds = 500;
+const spotifyRequestSpacingOn429Milliseconds = 1500;
+const releaseBatchSize = 10;
+const batchPauseMilliseconds = 2500;
 const maxRunLogEntries = 12;
 const artistDetailsBatchSize = 10;
-const artistDetailsPauseMilliseconds = 750;
+const artistDetailsPauseMilliseconds = 1000;
+const artistReleaseSpacingMilliseconds = 400;
 
 const clientIdInput = document.querySelector("#client-id");
 const redirectUriInput = document.querySelector("#redirect-uri");
@@ -100,6 +102,7 @@ const emailNode = document.querySelector("#email");
 const productNode = document.querySelector("#product");
 let isRunInProgress = false;
 let nextSpotifyRequestAt = 0;
+let currentSpotifyRequestSpacingMilliseconds = spotifyRequestSpacingMilliseconds;
 
 bootstrap();
 
@@ -382,6 +385,7 @@ async function runRadar({ mode = "build", startFresh = false, requireCheckpoint 
     isPrepOnly ? "Started prep-only cache run." : startFresh ? "Started fresh playlist build." : "Started playlist build."
   );
   renderRunLog();
+  resetSpotifyRequestThrottle();
 
   try {
     const profile = await spotifyGet("/me", accessToken);
@@ -655,13 +659,12 @@ async function hydrateArtistDetails(artistIds, accessToken) {
 
   for (let index = 0; index < missingArtistIds.length; index += artistDetailsBatchSize) {
     const end = Math.min(index + artistDetailsBatchSize, missingArtistIds.length);
-    setStatus(`Fetching artist details ${end} of ${missingArtistIds.length}...`);
     const batchIds = missingArtistIds.slice(index, index + artistDetailsBatchSize);
-    const responses = await Promise.all(
-      batchIds.map((artistId) => spotifyGet(`/artists/${artistId}`, accessToken))
-    );
 
-    for (const artist of responses) {
+    for (let batchIndex = 0; batchIndex < batchIds.length; batchIndex += 1) {
+      const artistId = batchIds[batchIndex];
+      setStatus(`Fetching artist details ${index + batchIndex + 1} of ${missingArtistIds.length}...`);
+      const artist = await spotifyGet(`/artists/${artistId}`, accessToken);
       if (artist?.id) {
         details.set(artist.id, artist);
         cache[artist.id] = artist;
@@ -823,6 +826,10 @@ async function fetchReleaseCandidates(weightedArtists, accessToken, releaseWindo
         releaseDate: candidate.releaseDate,
         isFeaturedAppearance: candidate.isFeaturedAppearance,
       }));
+
+      if (artistIndex + 1 < batchEnd) {
+        await wait(artistReleaseSpacingMilliseconds);
+      }
     }
 
     releaseCache[activeWindowKey] = cachedWindow;
@@ -1277,7 +1284,8 @@ async function spotifyRequest(path, init, accessToken) {
 async function waitForSpotifyRequestSlot() {
   const now = Date.now();
   const waitMilliseconds = Math.max(0, nextSpotifyRequestAt - now);
-  nextSpotifyRequestAt = Math.max(nextSpotifyRequestAt, now) + spotifyRequestSpacingMilliseconds;
+  nextSpotifyRequestAt =
+    Math.max(nextSpotifyRequestAt, now) + currentSpotifyRequestSpacingMilliseconds;
 
   if (waitMilliseconds > 0) {
     await wait(waitMilliseconds);
@@ -1365,12 +1373,21 @@ function resetRateTelemetry() {
   updateRateTelemetry();
 }
 
+function resetSpotifyRequestThrottle() {
+  nextSpotifyRequestAt = 0;
+  currentSpotifyRequestSpacingMilliseconds = spotifyRequestSpacingMilliseconds;
+}
+
 function recordRateLimitEvent(retryDelaySeconds, path) {
   const telemetry = getStoredJson(storageKeys.rateTelemetry, {});
   telemetry.last429At = new Date().toISOString();
   telemetry.retryDelaySeconds = retryDelaySeconds;
   telemetry.lastPath = path;
   setStoredJson(storageKeys.rateTelemetry, telemetry);
+  currentSpotifyRequestSpacingMilliseconds = Math.max(
+    currentSpotifyRequestSpacingMilliseconds,
+    spotifyRequestSpacingOn429Milliseconds
+  );
   addRunLogEntry(`Rate limited on ${path}. Waiting ${retryDelaySeconds}s before retry.`);
   updateRateTelemetry();
   renderRunLog();
