@@ -42,6 +42,7 @@ const excludedGenreKeywords = [
 
 const cacheRetentionDays = 14;
 const maxSpotifyRetries = 8;
+const spotifyRequestSpacingMilliseconds = 350;
 const releaseBatchSize = 25;
 const batchPauseMilliseconds = 1500;
 const maxRunLogEntries = 12;
@@ -98,6 +99,7 @@ const displayName = document.querySelector("#display-name");
 const emailNode = document.querySelector("#email");
 const productNode = document.querySelector("#product");
 let isRunInProgress = false;
+let nextSpotifyRequestAt = 0;
 
 bootstrap();
 
@@ -1226,6 +1228,7 @@ async function spotifyRequest(path, init, accessToken) {
     let response;
 
     try {
+      await waitForSpotifyRequestSlot();
       response = await fetch(`https://api.spotify.com/v1${path}`, {
         ...init,
         headers: {
@@ -1269,6 +1272,16 @@ async function spotifyRequest(path, init, accessToken) {
   }
 
   throw new Error("Spotify API kept rate limiting requests. Please try again shortly.");
+}
+
+async function waitForSpotifyRequestSlot() {
+  const now = Date.now();
+  const waitMilliseconds = Math.max(0, nextSpotifyRequestAt - now);
+  nextSpotifyRequestAt = Math.max(nextSpotifyRequestAt, now) + spotifyRequestSpacingMilliseconds;
+
+  if (waitMilliseconds > 0) {
+    await wait(waitMilliseconds);
+  }
 }
 
 function updateWindowStat(windowRange) {

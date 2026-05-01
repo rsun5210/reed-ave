@@ -100,9 +100,9 @@ jobs:
             fi
           fi
           if [ -f release-radar-run.log ]; then
-            window="$(grep '^Window:' release-radar-run.log | tail -n 1 | sed 's/^Window: //')"
-            tracks_added="$(grep '^Tracks added:' release-radar-run.log | tail -n 1 | sed 's/^Tracks added: //')"
-            playlist_url="$(grep '^Open:' release-radar-run.log | tail -n 1 | sed 's/^Open: //')"
+            window="$(grep '^Window:' release-radar-run.log | tail -n 1 | sed 's/^Window: //' || true)"
+            tracks_added="$(grep '^Tracks added:' release-radar-run.log | tail -n 1 | sed 's/^Tracks added: //' || true)"
+            playlist_url="$(grep '^Open:' release-radar-run.log | tail -n 1 | sed 's/^Open: //' || true)"
             if [ -n "$window" ] || [ -n "$tracks_added" ] || [ -n "$playlist_url" ]; then
               echo "" >> "$GITHUB_STEP_SUMMARY"
             fi
