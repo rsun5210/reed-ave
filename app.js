@@ -43,6 +43,8 @@ const excludedGenreKeywords = [
 
 const cacheRetentionDays = 14;
 const maxSpotifyRetries = 8;
+const maxNetworkRetries = 3;
+const networkRetryDelayMilliseconds = 1500;
 const spotifyRequestSpacingMilliseconds = 1000;
 const spotifyRequestSpacingOn429Milliseconds = 5000;
 const releaseBatchSize = 5;
@@ -260,19 +262,23 @@ async function exchangeCodeForToken(code) {
     return;
   }
 
-  const response = await fetch("https://accounts.spotify.com/api/token", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
+  const response = await fetchWithNetworkRetries(
+    "https://accounts.spotify.com/api/token",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        client_id: clientId,
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: redirectUri,
+        code_verifier: verifier,
+      }),
     },
-    body: new URLSearchParams({
-      client_id: clientId,
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: redirectUri,
-      code_verifier: verifier,
-    }),
-  });
+    "Spotify sign-in"
+  );
 
   const data = await safeParseJson(response);
 
@@ -293,17 +299,21 @@ async function refreshAccessToken() {
     return null;
   }
 
-  const response = await fetch("https://accounts.spotify.com/api/token", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
+  const response = await fetchWithNetworkRetries(
+    "https://accounts.spotify.com/api/token",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        client_id: clientId,
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+      }),
     },
-    body: new URLSearchParams({
-      client_id: clientId,
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-    }),
-  });
+    "Spotify session refresh"
+  );
 
   const data = await safeParseJson(response);
 
@@ -326,11 +336,15 @@ async function refreshAccessToken() {
 async function loadProfile(accessToken) {
   setStatus("Connected. Loading your Spotify profile...");
 
-  const response = await fetch("https://api.spotify.com/v1/me", {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
+  const response = await fetchWithNetworkRetries(
+    "https://api.spotify.com/v1/me",
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
     },
-  });
+    "Spotify profile load"
+  );
 
   const profile = await safeParseJson(response);
 
@@ -1362,19 +1376,19 @@ async function spotifyRequest(path, init, accessToken) {
   while (attempt < maxSpotifyRetries) {
     let response;
 
-    try {
-      await waitForSpotifyRequestSlot();
-      response = await fetch(`https://api.spotify.com/v1${path}`, {
+    await waitForSpotifyRequestSlot();
+    response = await fetchWithNetworkRetries(
+      `https://api.spotify.com/v1${path}`,
+      {
         ...init,
         headers: {
           Authorization: `Bearer ${activeToken}`,
           "Content-Type": "application/json",
           ...(init.headers ?? {}),
         },
-      });
-    } catch (error) {
-      throw new Error("Network error talking to Spotify. Check your connection and try again.");
-    }
+      },
+      "Spotify API request"
+    );
 
     if (response.status === 204) {
       return null;
@@ -1407,6 +1421,30 @@ async function spotifyRequest(path, init, accessToken) {
   }
 
   throw new Error("Spotify API kept rate limiting requests. Please try again shortly.");
+}
+
+async function fetchWithNetworkRetries(url, init, label = "Spotify request") {
+  let lastError = null;
+
+  for (let attempt = 0; attempt < maxNetworkRetries; attempt += 1) {
+    try {
+      return await fetch(url, init);
+    } catch (error) {
+      lastError = error;
+
+      if (attempt + 1 >= maxNetworkRetries) {
+        break;
+      }
+
+      addRunLogEntry(`${label} hit a network issue. Retrying shortly...`);
+      renderRunLog();
+      await wait(networkRetryDelayMilliseconds * (attempt + 1));
+    }
+  }
+
+  throw new Error(
+    `${label} kept failing at the network layer. Check your connection and try again.`
+  );
 }
 
 async function waitForSpotifyRequestSlot() {
