@@ -14,7 +14,7 @@ const storageKeys = {
   libraryLastFullScanAt: "spotify_library_last_full_scan_at",
   qualifiedArtistsCache: "spotify_qualified_artists_cache_v1",
   artistDetailsCache: "spotify_artist_details_cache_v1",
-  releaseCache: "spotify_release_cache_v4",
+  releaseCache: "spotify_release_cache_v5",
   albumTrackCache: "spotify_album_track_cache_v1",
   lastRunSummary: "spotify_last_run_summary_v1",
   batchCheckpoint: "spotify_batch_checkpoint_v1",
@@ -411,12 +411,6 @@ async function runRadar({ mode = "build", startFresh = false, requireCheckpoint 
     return;
   }
 
-  const checkpoint = getBatchCheckpoint();
-  if (requireCheckpoint && !checkpoint) {
-    setStatus("No saved checkpoint is available to resume.");
-    return;
-  }
-
   if (startFresh) {
     clearBatchCheckpoint();
     addRunLogEntry("Fresh run requested. Ignoring any saved checkpoint.");
@@ -429,8 +423,18 @@ async function runRadar({ mode = "build", startFresh = false, requireCheckpoint 
   const runTuning = getRunTuning();
   const playlistName = playlistNameInput.value.trim() || "Release Radar";
   const releaseWindow = getActiveFridayWindow();
+  const releaseContextKey = buildReleaseContextKey({
+    releaseWindow,
+    shouldFilterGenres: isGenreFilterEnabled(),
+  });
   const isPrepOnly = mode === "prep";
   const activeRunModeLabel = getRunModeLabel({ mode, startFresh, requireCheckpoint });
+  const checkpoint = getBatchCheckpoint();
+
+  if (requireCheckpoint && !checkpointMatchesReleaseContext(checkpoint, releaseContextKey)) {
+    setStatus("No saved checkpoint is available to resume.");
+    return;
+  }
 
   setStatus(
     isPrepOnly
@@ -478,7 +482,7 @@ async function runRadar({ mode = "build", startFresh = false, requireCheckpoint 
     setBatchCheckpoint({
       phase: "library-sync",
       detail: "Syncing liked songs and refreshing reusable local cache.",
-      windowKey: `${releaseWindow.start}:${releaseWindow.endExclusive}`,
+      windowKey: releaseContextKey,
       nextArtistIndex: 0,
       candidates: [],
     });
@@ -560,7 +564,7 @@ async function runRadar({ mode = "build", startFresh = false, requireCheckpoint 
       setBatchCheckpoint({
         phase: "playlist-sync",
         detail: `Ready to sync ${tracks.length} ranked tracks to Spotify.`,
-        windowKey: `${releaseWindow.start}:${releaseWindow.endExclusive}`,
+        windowKey: releaseContextKey,
         nextArtistIndex: weightedArtists.length,
         candidates: releaseCandidates.map((candidate) => serializeCandidate(candidate)),
         totalArtists: weightedArtists.length,
@@ -686,6 +690,10 @@ async function fetchSavedLibraryArtists(accessToken, runTuning, releaseWindow) {
   const latestCachedAddedAt = localStorage.getItem(storageKeys.libraryLatestAddedAt) ?? "";
   const libraryItems = await syncLibraryCache(cachedLibrary, latestCachedAddedAt, accessToken);
   const shouldFilterGenres = isGenreFilterEnabled();
+  const releaseContextKey = buildReleaseContextKey({
+    releaseWindow,
+    shouldFilterGenres,
+  });
   const activeLatestAddedAt = localStorage.getItem(storageKeys.libraryLatestAddedAt) ?? "";
   const qualifiedArtistsCache = getStoredJson(storageKeys.qualifiedArtistsCache, null);
   const qualifiedArtistsCacheKey = buildQualifiedArtistsCacheKey({
@@ -749,7 +757,7 @@ async function fetchSavedLibraryArtists(accessToken, runTuning, releaseWindow) {
   setBatchCheckpoint({
     phase: "artist-hydration",
     detail: `Hydrating artist details for ${qualifyingArtists.length} qualifying artists.`,
-    windowKey: `${releaseWindow.start}:${releaseWindow.endExclusive}`,
+    windowKey: releaseContextKey,
     nextArtistIndex: 0,
     candidates: [],
     totalArtists: qualifyingArtists.length,
@@ -759,7 +767,8 @@ async function fetchSavedLibraryArtists(accessToken, runTuning, releaseWindow) {
     qualifyingArtists.map((entry) => entry.artist.id),
     accessToken,
     runTuning,
-    releaseWindow
+    releaseWindow,
+    releaseContextKey
   );
 
   const filteredArtists = qualifyingArtists
@@ -777,7 +786,16 @@ async function fetchSavedLibraryArtists(accessToken, runTuning, releaseWindow) {
   return filteredArtists;
 }
 
-async function hydrateArtistDetails(artistIds, accessToken, runTuning, releaseWindow) {
+async function hydrateArtistDetails(
+  artistIds,
+  accessToken,
+  runTuning = getRunTuning(),
+  releaseWindow = getActiveFridayWindow(),
+  releaseContextKey = buildReleaseContextKey({
+    releaseWindow,
+    shouldFilterGenres: isGenreFilterEnabled(),
+  })
+) {
   const cache = getStoredJson(storageKeys.artistDetailsCache, {});
   const details = new Map();
   const missingArtistIds = [];
@@ -809,7 +827,7 @@ async function hydrateArtistDetails(artistIds, accessToken, runTuning, releaseWi
     setBatchCheckpoint({
       phase: "artist-hydration",
       detail: `Fetched artist details for ${end} of ${missingArtistIds.length} artists.`,
-      windowKey: `${releaseWindow.start}:${releaseWindow.endExclusive}`,
+      windowKey: releaseContextKey,
       nextArtistIndex: 0,
       candidates: [],
       totalArtists: missingArtistIds.length,
@@ -855,6 +873,18 @@ function buildQualifiedArtistsCacheKey({ latestAddedAt, libraryCount, shouldFilt
   return [latestAddedAt || "none", libraryCount, shouldFilterGenres ? "filtered" : "unfiltered"].join(":");
 }
 
+function buildReleaseContextKey({ releaseWindow, shouldFilterGenres }) {
+  return [
+    releaseWindow.start,
+    releaseWindow.endExclusive,
+    shouldFilterGenres ? "filtered" : "unfiltered",
+  ].join(":");
+}
+
+function checkpointMatchesReleaseContext(checkpoint, releaseContextKey) {
+  return Boolean(checkpoint?.windowKey && checkpoint.windowKey === releaseContextKey);
+}
+
 function getRunTuning() {
   return isSafeModeEnabled() ? safeRunTuning : standardRunTuning;
 }
@@ -865,11 +895,15 @@ async function fetchReleaseCandidates(weightedArtists, accessToken, releaseWindo
   const releaseCache = getStoredJson(storageKeys.releaseCache, {});
   const albumTrackCache = getStoredJson(storageKeys.albumTrackCache, {});
   const shouldFilterGenres = isGenreFilterEnabled();
-  const activeWindowKey = `${releaseWindow.start}:${releaseWindow.endExclusive}`;
+  const activeWindowKey = buildReleaseContextKey({
+    releaseWindow,
+    shouldFilterGenres,
+  });
   const shouldBypassReleaseCache = isWindowEndToday(releaseWindow);
   const cachedWindow = shouldBypassReleaseCache ? {} : releaseCache[activeWindowKey] ?? {};
   const checkpoint = getBatchCheckpoint();
-  const hasMatchingCheckpoint = !shouldBypassReleaseCache && checkpoint?.windowKey === activeWindowKey;
+  const hasMatchingCheckpoint =
+    !shouldBypassReleaseCache && checkpointMatchesReleaseContext(checkpoint, activeWindowKey);
   const restoredCandidates = hasMatchingCheckpoint ? checkpoint.candidates ?? [] : [];
 
   if (restoredCandidates.length) {
