@@ -6,6 +6,7 @@ const storageKeys = {
   codeVerifier: "spotify_code_verifier",
   clientId: "spotify_client_id",
   genreFilterEnabled: "spotify_genre_filter_enabled",
+  safeModeEnabled: "spotify_safe_mode_enabled",
   setupCollapsed: "spotify_setup_collapsed",
   playlistId: "spotify_playlist_id",
   libraryCache: "spotify_library_cache_v1",
@@ -52,6 +53,30 @@ const artistDetailsPauseMilliseconds = 1500;
 const artistReleaseSpacingMilliseconds = 1200;
 const albumReleaseSpacingMilliseconds = 900;
 
+const standardRunTuning = {
+  label: "Standard pacing",
+  requestSpacingMilliseconds: spotifyRequestSpacingMilliseconds,
+  requestSpacingOn429Milliseconds: spotifyRequestSpacingOn429Milliseconds,
+  releaseBatchSize,
+  batchPauseMilliseconds,
+  artistDetailsBatchSize,
+  artistDetailsPauseMilliseconds,
+  artistReleaseSpacingMilliseconds,
+  albumReleaseSpacingMilliseconds,
+};
+
+const safeRunTuning = {
+  label: "Safe mode pacing",
+  requestSpacingMilliseconds: 1600,
+  requestSpacingOn429Milliseconds: 7000,
+  releaseBatchSize: 3,
+  batchPauseMilliseconds: 7000,
+  artistDetailsBatchSize: 5,
+  artistDetailsPauseMilliseconds: 2200,
+  artistReleaseSpacingMilliseconds: 2200,
+  albumReleaseSpacingMilliseconds: 1500,
+};
+
 const clientIdInput = document.querySelector("#client-id");
 const redirectUriInput = document.querySelector("#redirect-uri");
 const connectButton = document.querySelector("#connect-button");
@@ -63,6 +88,7 @@ const freshButton = document.querySelector("#fresh-button");
 const clearCachesButton = document.querySelector("#clear-caches-button");
 const playlistNameInput = document.querySelector("#playlist-name");
 const genreFilterEnabledInput = document.querySelector("#genre-filter-enabled");
+const safeModeEnabledInput = document.querySelector("#safe-mode-enabled");
 const setupCard = document.querySelector("#setup-card");
 const setupCardBody = document.querySelector("#setup-card-body");
 const setupToggleButton = document.querySelector("#setup-toggle-button");
@@ -85,13 +111,17 @@ const resultsTitle = document.querySelector("#results-title");
 const resultsSummary = document.querySelector("#results-summary");
 const resultsList = document.querySelector("#results-list");
 const runStatePanel = document.querySelector("#run-state-panel");
+const runPhaseLabel = document.querySelector("#run-phase-label");
+const runTuningLabel = document.querySelector("#run-tuning-label");
 const runModeLabel = document.querySelector("#run-mode-label");
 const runProgressLabel = document.querySelector("#run-progress-label");
+const runPhaseDetail = document.querySelector("#run-phase-detail");
 const runProgressFill = document.querySelector("#run-progress-fill");
 const settingsStrip = document.querySelector("#settings-strip");
 const settingsMode = document.querySelector("#settings-mode");
 const settingsPlaylist = document.querySelector("#settings-playlist");
 const settingsFilter = document.querySelector("#settings-filter");
+const settingsSafeMode = document.querySelector("#settings-safe-mode");
 const settingsWindowPill = document.querySelector("#settings-window-pill");
 const lastPlaylistLink = document.querySelector("#last-playlist-link");
 const automationCard = document.querySelector("#automation-card");
@@ -104,6 +134,7 @@ const productNode = document.querySelector("#product");
 let isRunInProgress = false;
 let nextSpotifyRequestAt = 0;
 let currentSpotifyRequestSpacingMilliseconds = spotifyRequestSpacingMilliseconds;
+let currentRunTuning = standardRunTuning;
 
 bootstrap();
 
@@ -117,6 +148,10 @@ clearCachesButton.addEventListener("click", clearCaches);
 exportConfigButton.addEventListener("click", showAutomationConfig);
 genreFilterEnabledInput.addEventListener("change", () => {
   persistGenreFilterPreference();
+  updateSettingsSummary();
+});
+safeModeEnabledInput.addEventListener("change", () => {
+  persistSafeModePreference();
   updateSettingsSummary();
 });
 playlistNameInput.addEventListener("input", updateSettingsSummary);
@@ -134,6 +169,7 @@ async function bootstrap() {
   redirectUriInput.value = `${window.location.origin}${window.location.pathname}`;
   clientIdInput.value = localStorage.getItem(storageKeys.clientId) ?? "";
   genreFilterEnabledInput.checked = isGenreFilterEnabled();
+  safeModeEnabledInput.checked = isSafeModeEnabled();
   updateSettingsSummary();
   updateLastPlaylistLink();
   applySetupCardState();
@@ -350,6 +386,7 @@ async function runRadar({ mode = "build", startFresh = false, requireCheckpoint 
   isRunInProgress = true;
   setRunControlsDisabled(true);
   resetRateTelemetry();
+  const runTuning = getRunTuning();
   const playlistName = playlistNameInput.value.trim() || "Release Radar";
   const releaseWindow = getActiveFridayWindow();
   const isPrepOnly = mode === "prep";
@@ -360,12 +397,15 @@ async function runRadar({ mode = "build", startFresh = false, requireCheckpoint 
       ? "Preparing cache from your artists and recent releases..."
       : "Collecting your artists and recent releases..."
   );
-  updateSettingsSummary({ runModeLabel: activeRunModeLabel, releaseWindow });
+  updateSettingsSummary({ runModeLabel: activeRunModeLabel, releaseWindow, runTuning });
   resultsCard.classList.remove("hidden");
   renderRunState({
     visible: true,
     modeLabel: activeRunModeLabel,
+    phaseLabel: "Phase 1 of 4",
+    tuningLabel: runTuning.label,
     progressLabel: isPrepOnly ? "Preparing cache and release data..." : "Starting full playlist build...",
+    phaseDetail: "Library sync starts first, then artist prep, release scanning, and playlist sync.",
     percent: 6,
   });
   resultsTitle.textContent = isPrepOnly ? "Preparing Thursday cache..." : "Building your weekly radar...";
@@ -386,22 +426,40 @@ async function runRadar({ mode = "build", startFresh = false, requireCheckpoint 
     isPrepOnly ? "Started prep-only cache run." : startFresh ? "Started fresh playlist build." : "Started playlist build."
   );
   renderRunLog();
-  resetSpotifyRequestThrottle();
+  resetSpotifyRequestThrottle(runTuning);
 
   try {
+    const resumedCheckpoint = getBatchCheckpoint();
+    if (requireCheckpoint && resumedCheckpoint?.phase) {
+      addRunLogEntry(`Resuming from ${describeCheckpointPhase(resumedCheckpoint)}.`);
+      renderRunLog();
+    }
     const profile = await spotifyGet("/me", accessToken);
+    setBatchCheckpoint({
+      phase: "library-sync",
+      detail: "Syncing liked songs and refreshing reusable local cache.",
+      windowKey: `${releaseWindow.start}:${releaseWindow.endExclusive}`,
+      nextArtistIndex: 0,
+      candidates: [],
+    });
     renderRunState({
       visible: true,
       modeLabel: activeRunModeLabel,
+      phaseLabel: "Phase 1 of 4",
+      tuningLabel: runTuning.label,
       progressLabel: "Reading your Spotify profile and liked songs...",
+      phaseDetail: "This phase rebuilds reusable library state so later retries do much less work.",
       percent: 14,
     });
-    const weightedArtists = await fetchSavedLibraryArtists(accessToken);
+    const weightedArtists = await fetchSavedLibraryArtists(accessToken, runTuning, releaseWindow);
     updateRadarStats({ qualifiedArtists: weightedArtists.length });
     renderRunState({
       visible: true,
       modeLabel: activeRunModeLabel,
+      phaseLabel: "Phase 2 of 4",
+      tuningLabel: runTuning.label,
       progressLabel: `Found ${weightedArtists.length} qualifying artists.`,
+      phaseDetail: "Artist metadata is cached as it loads, so a resume can restart with warmer state.",
       percent: 34,
     });
 
@@ -418,13 +476,17 @@ async function runRadar({ mode = "build", startFresh = false, requireCheckpoint 
     const releaseCandidates = await fetchReleaseCandidates(
       weightedArtists,
       accessToken,
-      releaseWindow
+      releaseWindow,
+      runTuning
     );
     updateRadarStats({ releaseCount: releaseCandidates.length });
     renderRunState({
       visible: true,
       modeLabel: activeRunModeLabel,
+      phaseLabel: "Phase 3 of 4",
+      tuningLabel: runTuning.label,
       progressLabel: `Scanned this week's releases and found ${releaseCandidates.length} matches.`,
+      phaseDetail: "Release scanning checkpoints after each artist batch so Resume can continue from the last saved chunk.",
       percent: 74,
     });
 
@@ -449,8 +511,20 @@ async function runRadar({ mode = "build", startFresh = false, requireCheckpoint 
       renderRunState({
         visible: true,
         modeLabel: activeRunModeLabel,
+        phaseLabel: "Phase 4 of 4",
+        tuningLabel: runTuning.label,
         progressLabel: `Preparing to sync ${tracks.length} playlist tracks to Spotify...`,
+        phaseDetail: "Final phase: updating your Spotify playlist while keeping the warmed cache in place.",
         percent: 88,
+      });
+      setBatchCheckpoint({
+        phase: "playlist-sync",
+        detail: `Ready to sync ${tracks.length} ranked tracks to Spotify.`,
+        windowKey: `${releaseWindow.start}:${releaseWindow.endExclusive}`,
+        nextArtistIndex: weightedArtists.length,
+        candidates: releaseCandidates.map((candidate) => serializeCandidate(candidate)),
+        totalArtists: weightedArtists.length,
+        processedArtists: weightedArtists.length,
       });
       playlist = await upsertPlaylist(profile.id, playlistName, accessToken, releaseWindow);
       playlistChanged = await syncPlaylistDiff(
@@ -503,11 +577,16 @@ async function runRadar({ mode = "build", startFresh = false, requireCheckpoint 
     renderRunState({
       visible: true,
       modeLabel: activeRunModeLabel,
+      phaseLabel: isPrepOnly ? "Prep complete" : "All phases complete",
+      tuningLabel: runTuning.label,
       progressLabel: isPrepOnly
         ? "Cache warmup finished successfully."
         : playlistChanged
           ? "Playlist synced successfully."
           : "Playlist was already up to date.",
+      phaseDetail: isPrepOnly
+        ? "Your browser now has warmer cache data for the next full run."
+        : "You can reopen later and rely on the saved cache plus checkpoint state for a gentler rerun.",
       percent: 100,
     });
   } catch (error) {
@@ -523,7 +602,10 @@ async function runRadar({ mode = "build", startFresh = false, requireCheckpoint 
     renderRunState({
       visible: true,
       modeLabel: activeRunModeLabel,
+      phaseLabel: "Run interrupted",
+      tuningLabel: runTuning.label,
       progressLabel: error.message || "The run stopped before it could finish.",
+      phaseDetail: "The latest checkpoint and warmed caches were kept when possible, so Resume should have a better starting point.",
       percent: 100,
       failed: true,
     });
@@ -558,7 +640,7 @@ async function getValidAccessToken() {
   return refreshAccessToken();
 }
 
-async function fetchSavedLibraryArtists(accessToken) {
+async function fetchSavedLibraryArtists(accessToken, runTuning, releaseWindow) {
   setStatus("Syncing liked songs...");
   const cachedLibrary = getStoredJson(storageKeys.libraryCache, []);
   const latestCachedAddedAt = localStorage.getItem(storageKeys.libraryLatestAddedAt) ?? "";
@@ -624,9 +706,20 @@ async function fetchSavedLibraryArtists(accessToken) {
   }
 
   setStatus("Hydrating artist details...");
+  setBatchCheckpoint({
+    phase: "artist-hydration",
+    detail: `Hydrating artist details for ${qualifyingArtists.length} qualifying artists.`,
+    windowKey: `${releaseWindow.start}:${releaseWindow.endExclusive}`,
+    nextArtistIndex: 0,
+    candidates: [],
+    totalArtists: qualifyingArtists.length,
+    processedArtists: 0,
+  });
   const detailedArtists = await hydrateArtistDetails(
     qualifyingArtists.map((entry) => entry.artist.id),
-    accessToken
+    accessToken,
+    runTuning,
+    releaseWindow
   );
 
   const filteredArtists = qualifyingArtists
@@ -644,7 +737,7 @@ async function fetchSavedLibraryArtists(accessToken) {
   return filteredArtists;
 }
 
-async function hydrateArtistDetails(artistIds, accessToken) {
+async function hydrateArtistDetails(artistIds, accessToken, runTuning, releaseWindow) {
   const cache = getStoredJson(storageKeys.artistDetailsCache, {});
   const details = new Map();
   const missingArtistIds = [];
@@ -658,9 +751,9 @@ async function hydrateArtistDetails(artistIds, accessToken) {
     }
   }
 
-  for (let index = 0; index < missingArtistIds.length; index += artistDetailsBatchSize) {
-    const end = Math.min(index + artistDetailsBatchSize, missingArtistIds.length);
-    const batchIds = missingArtistIds.slice(index, index + artistDetailsBatchSize);
+  for (let index = 0; index < missingArtistIds.length; index += runTuning.artistDetailsBatchSize) {
+    const end = Math.min(index + runTuning.artistDetailsBatchSize, missingArtistIds.length);
+    const batchIds = missingArtistIds.slice(index, index + runTuning.artistDetailsBatchSize);
 
     for (let batchIndex = 0; batchIndex < batchIds.length; batchIndex += 1) {
       const artistId = batchIds[batchIndex];
@@ -673,9 +766,18 @@ async function hydrateArtistDetails(artistIds, accessToken) {
     }
 
     setStoredJson(storageKeys.artistDetailsCache, cache);
+    setBatchCheckpoint({
+      phase: "artist-hydration",
+      detail: `Fetched artist details for ${end} of ${missingArtistIds.length} artists.`,
+      windowKey: `${releaseWindow.start}:${releaseWindow.endExclusive}`,
+      nextArtistIndex: 0,
+      candidates: [],
+      totalArtists: missingArtistIds.length,
+      processedArtists: end,
+    });
 
     if (end < missingArtistIds.length) {
-      await wait(artistDetailsPauseMilliseconds);
+      await wait(runTuning.artistDetailsPauseMilliseconds);
     }
   }
 
@@ -691,6 +793,10 @@ function isGenreFilterEnabled() {
   return (localStorage.getItem(storageKeys.genreFilterEnabled) ?? "true") !== "false";
 }
 
+function isSafeModeEnabled() {
+  return (localStorage.getItem(storageKeys.safeModeEnabled) ?? "false") === "true";
+}
+
 function persistGenreFilterPreference() {
   localStorage.setItem(
     storageKeys.genreFilterEnabled,
@@ -698,11 +804,22 @@ function persistGenreFilterPreference() {
   );
 }
 
+function persistSafeModePreference() {
+  localStorage.setItem(
+    storageKeys.safeModeEnabled,
+    safeModeEnabledInput.checked ? "true" : "false"
+  );
+}
+
 function buildQualifiedArtistsCacheKey({ latestAddedAt, libraryCount, shouldFilterGenres }) {
   return [latestAddedAt || "none", libraryCount, shouldFilterGenres ? "filtered" : "unfiltered"].join(":");
 }
 
-async function fetchReleaseCandidates(weightedArtists, accessToken, releaseWindow) {
+function getRunTuning() {
+  return isSafeModeEnabled() ? safeRunTuning : standardRunTuning;
+}
+
+async function fetchReleaseCandidates(weightedArtists, accessToken, releaseWindow, runTuning) {
   setStatus("Scanning recent releases...");
   const candidates = [];
   const releaseCache = getStoredJson(storageKeys.releaseCache, {});
@@ -722,13 +839,13 @@ async function fetchReleaseCandidates(weightedArtists, accessToken, releaseWindo
   for (
     let batchStart = hasMatchingCheckpoint ? checkpoint.nextArtistIndex ?? 0 : 0;
     batchStart < weightedArtists.length;
-    batchStart += releaseBatchSize
+    batchStart += runTuning.releaseBatchSize
   ) {
-    const batchEnd = Math.min(batchStart + releaseBatchSize, weightedArtists.length);
+    const batchEnd = Math.min(batchStart + runTuning.releaseBatchSize, weightedArtists.length);
     updateBatchTelemetry({
-      currentBatch: Math.ceil(batchEnd / releaseBatchSize),
-      batchesCompleted: Math.ceil(batchStart / releaseBatchSize),
-      totalBatches: Math.ceil(weightedArtists.length / releaseBatchSize),
+      currentBatch: Math.ceil(batchEnd / runTuning.releaseBatchSize),
+      batchesCompleted: Math.ceil(batchStart / runTuning.releaseBatchSize),
+      totalBatches: Math.ceil(weightedArtists.length / runTuning.releaseBatchSize),
     });
 
     for (let artistIndex = batchStart; artistIndex < batchEnd; artistIndex += 1) {
@@ -821,7 +938,7 @@ async function fetchReleaseCandidates(weightedArtists, accessToken, releaseWindo
         }
 
         if (album !== releases[releases.length - 1]) {
-          await wait(albumReleaseSpacingMilliseconds);
+          await wait(runTuning.albumReleaseSpacingMilliseconds);
         }
       }
 
@@ -833,7 +950,7 @@ async function fetchReleaseCandidates(weightedArtists, accessToken, releaseWindo
       }));
 
       if (artistIndex + 1 < batchEnd) {
-        await wait(artistReleaseSpacingMilliseconds);
+        await wait(runTuning.artistReleaseSpacingMilliseconds);
       }
     }
 
@@ -845,21 +962,27 @@ async function fetchReleaseCandidates(weightedArtists, accessToken, releaseWindo
       windowKey: activeWindowKey,
       nextArtistIndex: batchEnd,
       candidates: candidates.map((candidate) => serializeCandidate(candidate)),
+      phase: "release-scan",
+      detail: `Scanned release batch ${Math.ceil(batchEnd / runTuning.releaseBatchSize)} of ${Math.ceil(
+        weightedArtists.length / runTuning.releaseBatchSize
+      )}.`,
+      totalArtists: weightedArtists.length,
+      processedArtists: batchEnd,
     });
     updateCheckpointStatus();
     updateBatchTelemetry({
-      currentBatch: Math.ceil(batchEnd / releaseBatchSize),
-      batchesCompleted: Math.ceil(batchEnd / releaseBatchSize),
-      totalBatches: Math.ceil(weightedArtists.length / releaseBatchSize),
+      currentBatch: Math.ceil(batchEnd / runTuning.releaseBatchSize),
+      batchesCompleted: Math.ceil(batchEnd / runTuning.releaseBatchSize),
+      totalBatches: Math.ceil(weightedArtists.length / runTuning.releaseBatchSize),
     });
 
     if (batchEnd < weightedArtists.length) {
       setStatus(
-        `Completed batch ${Math.ceil(batchEnd / releaseBatchSize)} of ${Math.ceil(
-          weightedArtists.length / releaseBatchSize
+        `Completed batch ${Math.ceil(batchEnd / runTuning.releaseBatchSize)} of ${Math.ceil(
+          weightedArtists.length / runTuning.releaseBatchSize
         )}. Pausing before next chunk...`
       );
-      await wait(batchPauseMilliseconds);
+      await wait(runTuning.batchPauseMilliseconds);
     }
   }
 
@@ -1345,7 +1468,7 @@ function updateCheckpointStatus() {
     return;
   }
 
-  checkpointStatus.textContent = `Checkpoint saved for ${checkpoint.windowKey} at artist ${checkpoint.nextArtistIndex}.`;
+  checkpointStatus.textContent = `Checkpoint saved: ${describeCheckpointPhase(checkpoint)}.`;
   if (!isRunInProgress) {
     resumeButton.disabled = false;
   }
@@ -1378,9 +1501,10 @@ function resetRateTelemetry() {
   updateRateTelemetry();
 }
 
-function resetSpotifyRequestThrottle() {
+function resetSpotifyRequestThrottle(runTuning = getRunTuning()) {
+  currentRunTuning = runTuning;
   nextSpotifyRequestAt = 0;
-  currentSpotifyRequestSpacingMilliseconds = spotifyRequestSpacingMilliseconds;
+  currentSpotifyRequestSpacingMilliseconds = runTuning.requestSpacingMilliseconds;
 }
 
 function recordRateLimitEvent(retryDelaySeconds, path) {
@@ -1391,7 +1515,7 @@ function recordRateLimitEvent(retryDelaySeconds, path) {
   setStoredJson(storageKeys.rateTelemetry, telemetry);
   currentSpotifyRequestSpacingMilliseconds = Math.max(
     currentSpotifyRequestSpacingMilliseconds,
-    spotifyRequestSpacingOn429Milliseconds
+    currentRunTuning.requestSpacingOn429Milliseconds
   );
   addRunLogEntry(`Rate limited on ${path}. Waiting ${retryDelaySeconds}s before retry.`);
   updateRateTelemetry();
@@ -1457,10 +1581,41 @@ function getRunModeLabel({ mode = "build", startFresh = false, requireCheckpoint
   return "Full build";
 }
 
+function describeCheckpointPhase(checkpoint) {
+  if (!checkpoint?.phase) {
+    return `release scan for ${checkpoint?.windowKey ?? "this window"} at artist ${checkpoint?.nextArtistIndex ?? 0}`;
+  }
+
+  if (checkpoint.phase === "library-sync") {
+    return "library sync";
+  }
+
+  if (checkpoint.phase === "artist-hydration") {
+    return checkpoint.totalArtists
+      ? `artist hydration (${checkpoint.processedArtists ?? 0}/${checkpoint.totalArtists})`
+      : "artist hydration";
+  }
+
+  if (checkpoint.phase === "release-scan") {
+    return checkpoint.totalArtists
+      ? `release scan (${checkpoint.processedArtists ?? checkpoint.nextArtistIndex ?? 0}/${checkpoint.totalArtists})`
+      : `release scan at artist ${checkpoint.nextArtistIndex ?? 0}`;
+  }
+
+  if (checkpoint.phase === "playlist-sync") {
+    return "playlist sync";
+  }
+
+  return checkpoint.phase;
+}
+
 function renderRunState({
   visible,
   modeLabel = "Full build",
+  phaseLabel = "Phase 1 of 4",
+  tuningLabel = "Standard pacing",
   progressLabel = "Waiting to start.",
+  phaseDetail = "The app will keep saving progress as it moves through each phase.",
   percent = 0,
   failed = false,
 } = {}) {
@@ -1472,8 +1627,11 @@ function renderRunState({
   }
 
   runStatePanel.classList.toggle("is-failed", failed);
+  runPhaseLabel.textContent = phaseLabel;
+  runTuningLabel.textContent = tuningLabel;
   runModeLabel.textContent = modeLabel;
   runProgressLabel.textContent = progressLabel;
+  runPhaseDetail.textContent = phaseDetail;
   runProgressFill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
 }
 
@@ -1525,11 +1683,13 @@ function renderTrackList(tracks, { showScore = true } = {}) {
 function updateSettingsSummary({
   runModeLabel: activeRunModeLabel = "Full build",
   releaseWindow = getActiveFridayWindow(),
+  runTuning = getRunTuning(),
 } = {}) {
   settingsStrip.classList.remove("hidden");
   settingsMode.textContent = `Mode: ${activeRunModeLabel}`;
   settingsPlaylist.textContent = `Playlist: ${playlistNameInput.value.trim() || "Release Radar"}`;
   settingsFilter.textContent = `Genre filter: ${isGenreFilterEnabled() ? "On" : "Off"}`;
+  settingsSafeMode.textContent = `Safe mode: ${isSafeModeEnabled() ? "On" : "Off"} (${runTuning.label})`;
   settingsWindowPill.textContent = `Window: ${formatWindowDate(releaseWindow.start)} to ${formatWindowDate(
     getInclusiveWindowEnd(releaseWindow)
   )}`;

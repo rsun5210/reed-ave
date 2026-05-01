@@ -531,6 +531,13 @@ h2 {
   margin-bottom: 14px;
 }
 
+.run-state-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
 .run-state-copy strong {
   font-size: 1.1rem;
   line-height: 1.25;
@@ -538,6 +545,11 @@ h2 {
 
 .run-state-copy span {
   color: #dbe7ff;
+}
+
+#run-phase-detail {
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 .progress-track {

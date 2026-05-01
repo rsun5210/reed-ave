@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Release Radar</title>
-    <link rel="stylesheet" href="./styles.css?v=cf7b259-cachefix1" />
+    <link rel="stylesheet" href="./styles.css?v=ux-safe-mode-1" />
   </head>
   <body>
     <main class="app-shell">
@@ -147,6 +147,15 @@
                 </label>
                 <small class="field-hint">Turn this off for a broader scan or if you want a lighter first pass.</small>
               </div>
+
+              <div class="field field-checkbox">
+                <span>Safe mode</span>
+                <label class="checkbox-row">
+                  <input id="safe-mode-enabled" type="checkbox" />
+                  <span>Use slower, gentler request pacing for first runs and shared use</span>
+                </label>
+                <small class="field-hint">This makes the app much slower, but it lowers request pressure and improves first-run reliability.</small>
+              </div>
             </div>
           </section>
 
@@ -154,8 +163,13 @@
             <div id="run-state-panel" class="run-state-panel hidden">
               <div class="run-state-copy">
                 <p class="eyebrow">Current Run</p>
+                <div class="run-state-meta">
+                  <span id="run-phase-label" class="meta-pill">Phase 1 of 4</span>
+                  <span id="run-tuning-label" class="meta-pill">Standard pacing</span>
+                </div>
                 <strong id="run-mode-label">Full build</strong>
                 <span id="run-progress-label">Waiting to start.</span>
+                <span id="run-phase-detail" class="muted">The app will keep saving progress as it moves through each phase.</span>
               </div>
               <div class="progress-track" aria-hidden="true">
                 <span id="run-progress-fill" class="progress-fill"></span>
@@ -165,6 +179,7 @@
               <span id="settings-mode" class="meta-pill">Mode: Full build</span>
               <span id="settings-playlist" class="meta-pill">Playlist: Release Radar</span>
               <span id="settings-filter" class="meta-pill">Genre filter: On</span>
+              <span id="settings-safe-mode" class="meta-pill">Safe mode: Off</span>
               <span id="settings-window-pill" class="meta-pill">Window: Sat to Fri</span>
               <a
                 id="last-playlist-link"
@@ -225,7 +240,7 @@
             <p class="eyebrow">Controls</p>
             <h2>Run management</h2>
             <p class="muted section-note">
-              Use prep for a lighter cache warmup, or resume if a long run was interrupted.
+              Use prep for a lighter cache warmup, safe mode for slower first runs, or resume if a long run was interrupted.
             </p>
             <div class="actions">
               <button id="resume-button" class="button button-secondary">Resume From Checkpoint</button>
@@ -263,6 +278,6 @@
       </section>
     </main>
 
-    <script type="module" src="./app.js?v=cf7b259-cachefix1"></script>
+    <script type="module" src="./app.js?v=ux-safe-mode-1"></script>
   </body>
 </html>
