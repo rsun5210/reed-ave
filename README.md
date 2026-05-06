@@ -29,7 +29,7 @@ Set these repository secrets in GitHub:
 - `SPOTIFY_CLIENT_ID`
 - `SPOTIFY_REFRESH_TOKEN`
 - `SPOTIFY_PLAYLIST_ID` (optional, but helpful once you know the playlist ID)
-- `GITHUB_SECRETS_WRITE_TOKEN` (optional, but recommended if you want the workflow to auto-rotate `SPOTIFY_REFRESH_TOKEN`)
+- `SECRETS_WRITE_TOKEN` (optional, but recommended if you want the workflow to auto-rotate `SPOTIFY_REFRESH_TOKEN`)
 
 To add them in GitHub:
 
@@ -42,8 +42,8 @@ The workflow writes a temporary `.release-radar.json` on the runner, runs `./rel
 Notes:
 
 - The scheduled GitHub Actions run uses your stored Spotify refresh token, so you do not need to open the Vercel page each week.
-- If Spotify ever rotates your refresh token, the workflow can now update `SPOTIFY_REFRESH_TOKEN` automatically if you also provide `GITHUB_SECRETS_WRITE_TOKEN`.
-- `GITHUB_SECRETS_WRITE_TOKEN` should be a narrowly scoped GitHub token that can write repository secrets for this repo. That is a higher-privilege setup than the default workflow, so only add it if you want true self-healing token rotation.
+- If Spotify ever rotates your refresh token, the workflow can now update `SPOTIFY_REFRESH_TOKEN` automatically if you also provide `SECRETS_WRITE_TOKEN`.
+- `SECRETS_WRITE_TOKEN` should be a narrowly scoped GitHub token that can write repository secrets for this repo. That is a higher-privilege setup than the default workflow, so only add it if you want true self-healing token rotation.
 - `SPOTIFY_PLAYLIST_ID` is optional because the runner can still find the playlist by name, but setting it makes updates more direct.
 - The shell runner now computes the Friday window in Python so it works on both macOS and Linux runners.
 - The workflow now restores and saves `.release-radar-cache/` between runs, so future Friday updates can reuse liked-song, genre, album, and release caches instead of starting from zero every week.

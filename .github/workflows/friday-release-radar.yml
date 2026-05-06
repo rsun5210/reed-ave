@@ -26,7 +26,7 @@ jobs:
       SPOTIFY_RADAR_CACHE_DIR: .release-radar-cache
       SPOTIFY_PLAYLIST_NAME: Weekly Release Radar
       SPOTIFY_MIN_SAVED_TRACKS_PER_ARTIST: "2"
-      GITHUB_SECRETS_WRITE_TOKEN: ${{ secrets.GITHUB_SECRETS_WRITE_TOKEN }}
+      SECRETS_WRITE_TOKEN: ${{ secrets.SECRETS_WRITE_TOKEN }}
       SPOTIFY_PLAYLIST_ID: ${{ secrets.SPOTIFY_PLAYLIST_ID }}
       SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
       SPOTIFY_REFRESH_TOKEN: ${{ secrets.SPOTIFY_REFRESH_TOKEN }}
@@ -91,7 +91,7 @@ jobs:
         if: always()
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_SECRETS_WRITE_TOKEN }}
+          GH_TOKEN: ${{ secrets.SECRETS_WRITE_TOKEN }}
         run: |
           if [ ! -f .release-radar.json ]; then
             echo "No runtime config found, so there is no refresh token to rotate." >> "$GITHUB_STEP_SUMMARY"
@@ -99,7 +99,7 @@ jobs:
           fi
 
           if [ -z "$GH_TOKEN" ]; then
-            echo "Skipping refresh-token secret rotation because GITHUB_SECRETS_WRITE_TOKEN is not configured." >> "$GITHUB_STEP_SUMMARY"
+            echo "Skipping refresh-token secret rotation because SECRETS_WRITE_TOKEN is not configured." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
