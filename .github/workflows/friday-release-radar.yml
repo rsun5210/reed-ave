@@ -115,7 +115,7 @@ jobs:
             exit 0
           fi
 
-          printf '%s' "$runtime_refresh_token" | gh secret set SPOTIFY_REFRESH_TOKEN --repo "$GITHUB_REPOSITORY" --body-file -
+          gh secret set SPOTIFY_REFRESH_TOKEN --repo "$GITHUB_REPOSITORY" --body "$runtime_refresh_token"
           echo "Updated the SPOTIFY_REFRESH_TOKEN repository secret from the token returned during this run." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Summarize playlist details
