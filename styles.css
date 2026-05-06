@@ -695,6 +695,20 @@ h2 {
   margin-top: 16px;
 }
 
+.automation-warning {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 196, 87, 0.28);
+  background: rgba(255, 196, 87, 0.08);
+  color: #ffe9b0;
+  line-height: 1.5;
+}
+
+.automation-warning code {
+  color: #fff2cd;
+}
+
 .compact-list {
   gap: 10px;
 }

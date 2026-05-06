@@ -9,6 +9,7 @@ const storageKeys = {
   safeModeEnabled: "spotify_safe_mode_enabled",
   setupCollapsed: "spotify_setup_collapsed",
   playlistId: "spotify_playlist_id",
+  backendSecretRefreshNeeded: "spotify_backend_secret_refresh_needed",
   libraryCache: "spotify_library_cache_v1",
   libraryLatestAddedAt: "spotify_library_latest_added_at",
   libraryLastFullScanAt: "spotify_library_last_full_scan_at",
@@ -128,6 +129,7 @@ const settingsWindowPill = document.querySelector("#settings-window-pill");
 const lastPlaylistLink = document.querySelector("#last-playlist-link");
 const automationCard = document.querySelector("#automation-card");
 const exportConfigButton = document.querySelector("#export-config-button");
+const automationWarning = document.querySelector("#automation-warning");
 const configOutput = document.querySelector("#config-output");
 const profileImage = document.querySelector("#profile-image");
 const displayName = document.querySelector("#display-name");
@@ -175,6 +177,7 @@ async function bootstrap() {
     safeModeEnabledInput.checked = isSafeModeEnabled();
     updateSettingsSummary();
     updateLastPlaylistLink();
+    updateAutomationWarning();
     applySetupCardState();
 
     const params = new URLSearchParams(window.location.search);
@@ -662,6 +665,7 @@ async function runRadar({ mode = "build", startFresh = false, requireCheckpoint 
 }
 
 function persistTokenData(data) {
+  const previousRefreshToken = localStorage.getItem(storageKeys.refreshToken);
   localStorage.setItem(storageKeys.accessToken, data.access_token);
   localStorage.setItem(
     storageKeys.expiresAt,
@@ -670,6 +674,12 @@ function persistTokenData(data) {
 
   if (data.refresh_token) {
     localStorage.setItem(storageKeys.refreshToken, data.refresh_token);
+    if (previousRefreshToken && previousRefreshToken !== data.refresh_token) {
+      localStorage.setItem(storageKeys.backendSecretRefreshNeeded, "true");
+      updateAutomationWarning();
+      addRunLogEntry("Spotify rotated the local refresh token. Update the GitHub secret before the next backend run.");
+      renderRunLog();
+    }
   }
 }
 
@@ -1354,7 +1364,9 @@ function showAutomationConfig() {
 
   configOutput.textContent = JSON.stringify(config, null, 2);
   configOutput.classList.remove("hidden");
-  setStatus("Automation config ready to copy into .release-radar.json.");
+  localStorage.setItem(storageKeys.backendSecretRefreshNeeded, "true");
+  updateAutomationWarning();
+  setStatus("Automation config ready. If you use GitHub Actions, update SPOTIFY_REFRESH_TOKEN there too.");
 }
 
 function disconnect(clearClientId = true) {
@@ -1376,6 +1388,7 @@ function disconnect(clearClientId = true) {
   automationCard.classList.add("hidden");
   resultsCard.classList.add("hidden");
   configOutput.classList.add("hidden");
+  updateAutomationWarning();
   resultsList.innerHTML = "";
   updateRadarStats({
     qualifiedArtists: 0,
@@ -1855,6 +1868,15 @@ function updateLastPlaylistLink() {
 
   lastPlaylistLink.href = `https://open.spotify.com/playlist/${summary.playlistId}`;
   lastPlaylistLink.classList.remove("hidden");
+}
+
+function updateAutomationWarning() {
+  if (!automationWarning) {
+    return;
+  }
+
+  const shouldWarn = localStorage.getItem(storageKeys.backendSecretRefreshNeeded) === "true";
+  automationWarning.classList.toggle("hidden", !shouldWarn);
 }
 
 function isSetupCollapsed() {
