@@ -26,6 +26,7 @@ jobs:
       SPOTIFY_RADAR_CACHE_DIR: .release-radar-cache
       SPOTIFY_PLAYLIST_NAME: Weekly Release Radar
       SPOTIFY_MIN_SAVED_TRACKS_PER_ARTIST: "2"
+      GITHUB_SECRETS_WRITE_TOKEN: ${{ secrets.GITHUB_SECRETS_WRITE_TOKEN }}
       SPOTIFY_PLAYLIST_ID: ${{ secrets.SPOTIFY_PLAYLIST_ID }}
       SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
       SPOTIFY_REFRESH_TOKEN: ${{ secrets.SPOTIFY_REFRESH_TOKEN }}
@@ -46,6 +47,7 @@ jobs:
         shell: bash
         run: |
           missing_packages=()
+          command -v gh >/dev/null 2>&1 || missing_packages+=("gh")
           command -v jq >/dev/null 2>&1 || missing_packages+=("jq")
           command -v zsh >/dev/null 2>&1 || missing_packages+=("zsh")
           if [ "${#missing_packages[@]}" -gt 0 ]; then
@@ -84,6 +86,37 @@ jobs:
         run: |
           set -o pipefail
           ./release-radar.sh 2>&1 | tee release-radar-run.log
+
+      - name: Rotate GitHub refresh token secret when Spotify issues a new one
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_SECRETS_WRITE_TOKEN }}
+        run: |
+          if [ ! -f .release-radar.json ]; then
+            echo "No runtime config found, so there is no refresh token to rotate." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [ -z "$GH_TOKEN" ]; then
+            echo "Skipping refresh-token secret rotation because GITHUB_SECRETS_WRITE_TOKEN is not configured." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          runtime_refresh_token="$(jq -r '.refresh_token // empty' .release-radar.json)"
+
+          if [ -z "$runtime_refresh_token" ]; then
+            echo "Runtime config did not contain a refresh token to rotate." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [ "$runtime_refresh_token" = "$SPOTIFY_REFRESH_TOKEN" ]; then
+            echo "Spotify refresh token did not rotate during this run." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          printf '%s' "$runtime_refresh_token" | gh secret set SPOTIFY_REFRESH_TOKEN --repo "$GITHUB_REPOSITORY" --body-file -
+          echo "Updated the SPOTIFY_REFRESH_TOKEN repository secret from the token returned during this run." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Summarize playlist details
         if: always()
