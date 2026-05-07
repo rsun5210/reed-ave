@@ -80,6 +80,18 @@ const safeRunTuning = {
   albumReleaseSpacingMilliseconds: 1500,
 };
 
+const bootstrapRunTuning = {
+  label: "Cold-start pacing",
+  requestSpacingMilliseconds: 2600,
+  requestSpacingOn429Milliseconds: 12000,
+  releaseBatchSize: 2,
+  batchPauseMilliseconds: 12000,
+  artistDetailsBatchSize: 2,
+  artistDetailsPauseMilliseconds: 3200,
+  artistReleaseSpacingMilliseconds: 3200,
+  albumReleaseSpacingMilliseconds: 2200,
+};
+
 const clientIdInput = document.querySelector("#client-id");
 const redirectUriInput = document.querySelector("#redirect-uri");
 const connectButton = document.querySelector("#connect-button");
@@ -896,7 +908,19 @@ function checkpointMatchesReleaseContext(checkpoint, releaseContextKey) {
 }
 
 function getRunTuning() {
+  if (isColdStartRun()) {
+    return bootstrapRunTuning;
+  }
+
   return isSafeModeEnabled() ? safeRunTuning : standardRunTuning;
+}
+
+function isColdStartRun() {
+  const libraryCount = getStoredJson(storageKeys.libraryCache, []).length;
+  const artistCount = Object.keys(getStoredJson(storageKeys.artistDetailsCache, {})).length;
+  const lastRun = getStoredJson(storageKeys.lastRunSummary, null);
+
+  return libraryCount === 0 && artistCount === 0 && !lastRun?.completedAt;
 }
 
 async function fetchReleaseCandidates(weightedArtists, accessToken, releaseWindow, runTuning) {
