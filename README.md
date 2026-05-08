@@ -22,7 +22,7 @@ After a successful run, the script can persist the chosen Spotify `playlist_id` 
 
 If you want true unattended Friday updates without opening the browser, this repo now includes a GitHub Actions workflow at `.github/workflows/friday-release-radar.yml`.
 
-It runs every Friday at `7:00 AM` in the `America/Los_Angeles` timezone and can also be run manually from the GitHub `Actions` tab.
+It runs every Friday at `7:17 AM` in the `America/Los_Angeles` timezone and can also be run manually from the GitHub `Actions` tab.
 
 Set these repository secrets in GitHub:
 
